@@ -1,37 +1,36 @@
-import { z } from 'zod';
 import { streamObject } from 'ai';
+import { z } from 'zod';
+
 import { myProvider } from '@/lib/ai/models';
-import { codePrompt, updateDocumentPrompt } from '@/lib/ai/prompts';
+import { updateDocumentPrompt } from '@/lib/ai/prompts';
 import { createDocumentHandler } from '@/lib/blocks/server';
 
 export const codeDocumentHandler = createDocumentHandler<'code'>({
   kind: 'code',
   onCreateDocument: async ({ title, dataStream }) => {
-    let draftContent = '';
-
     const { fullStream } = streamObject({
       model: myProvider.languageModel('block-model'),
-      system: codePrompt,
+      system: `You are a code generator. You will generate code based on the title provided.
+      The code should be well-documented and follow best practices.
+      Include any necessary imports and dependencies.`,
       prompt: title,
       schema: z.object({
         code: z.string(),
+        language: z.string(),
       }),
     });
 
-    for await (const delta of fullStream) {
-      const { type } = delta;
+    let draftContent = '';
 
-      if (type === 'object') {
-        const { object } = delta;
-        const { code } = object;
-
+    for await (const chunk of fullStream) {
+      if (chunk.type === 'object') {
+        const { code } = chunk.object;
         if (code) {
+          draftContent = code;
           dataStream.writeData({
             type: 'code-delta',
-            content: code ?? '',
+            content: code,
           });
-
-          draftContent = code;
         }
       }
     }
@@ -39,31 +38,27 @@ export const codeDocumentHandler = createDocumentHandler<'code'>({
     return draftContent;
   },
   onUpdateDocument: async ({ document, description, dataStream }) => {
-    let draftContent = '';
-
     const { fullStream } = streamObject({
       model: myProvider.languageModel('block-model'),
-      system: updateDocumentPrompt(document.content, 'code'),
+      system: updateDocumentPrompt(document.content || '', 'code'),
       prompt: description,
       schema: z.object({
         code: z.string(),
+        language: z.string(),
       }),
     });
 
-    for await (const delta of fullStream) {
-      const { type } = delta;
+    let draftContent = '';
 
-      if (type === 'object') {
-        const { object } = delta;
-        const { code } = object;
-
+    for await (const chunk of fullStream) {
+      if (chunk.type === 'object') {
+        const { code } = chunk.object;
         if (code) {
+          draftContent = code;
           dataStream.writeData({
             type: 'code-delta',
-            content: code ?? '',
+            content: code,
           });
-
-          draftContent = code;
         }
       }
     }

@@ -73,23 +73,31 @@ export function PureMessageActions({
                 toast.promise(upvote, {
                   loading: 'Upvoting Response...',
                   success: () => {
-                    mutate<Array<Vote>>(
+                    mutate(
                       `/api/vote?chatId=${chatId}`,
-                      (currentVotes) => {
+                      (currentVotes: Vote[] | undefined) => {
                         if (!currentVotes) return [];
 
-                        const votesWithoutCurrent = currentVotes.filter(
-                          (vote) => vote.messageId !== message.id,
+                        const existingVote = currentVotes.find(
+                          (vote) => vote.messageId === message.id,
                         );
 
-                        return [
-                          ...votesWithoutCurrent,
-                          {
-                            chatId,
-                            messageId: message.id,
-                            isUpvoted: true,
-                          },
-                        ];
+                        if (existingVote) {
+                          return currentVotes.map((vote) =>
+                            vote.messageId === message.id
+                              ? { ...vote, isUpvoted: true }
+                              : vote,
+                          );
+                        }
+
+                        const newVote: Vote = {
+                          chatId,
+                          messageId: message.id,
+                          isUpvoted: true,
+                          type: 'vote' as const
+                        };
+
+                        return [...currentVotes, newVote];
                       },
                       { revalidate: false },
                     );
@@ -125,23 +133,31 @@ export function PureMessageActions({
                 toast.promise(downvote, {
                   loading: 'Downvoting Response...',
                   success: () => {
-                    mutate<Array<Vote>>(
+                    mutate(
                       `/api/vote?chatId=${chatId}`,
-                      (currentVotes) => {
+                      (currentVotes: Vote[] | undefined) => {
                         if (!currentVotes) return [];
 
-                        const votesWithoutCurrent = currentVotes.filter(
-                          (vote) => vote.messageId !== message.id,
+                        const existingVote = currentVotes.find(
+                          (vote) => vote.messageId === message.id,
                         );
 
-                        return [
-                          ...votesWithoutCurrent,
-                          {
-                            chatId,
-                            messageId: message.id,
-                            isUpvoted: false,
-                          },
-                        ];
+                        if (existingVote) {
+                          return currentVotes.map((vote) =>
+                            vote.messageId === message.id
+                              ? { ...vote, isUpvoted: false }
+                              : vote,
+                          );
+                        }
+
+                        const newVote: Vote = {
+                          chatId,
+                          messageId: message.id,
+                          isUpvoted: false,
+                          type: 'vote' as const
+                        };
+
+                        return [...currentVotes, newVote];
                       },
                       { revalidate: false },
                     );

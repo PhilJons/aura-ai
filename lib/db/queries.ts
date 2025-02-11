@@ -120,10 +120,10 @@ export async function voteMessage({
     chatId,
     messageId,
     isUpvoted: type === 'up',
-    type: 'vote'
+    type: 'vote' as const
   };
   const { resource } = await containers.votes.items.upsert(vote);
-  return resource as Vote;
+  return resource ? { ...vote, ...resource } : vote;
 }
 
 export async function getVotesByChatId({ id }: { id: string }): Promise<Vote[]> {

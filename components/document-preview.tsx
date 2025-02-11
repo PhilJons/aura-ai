@@ -92,8 +92,9 @@ export function DocumentPreview({
           kind: block.kind,
           content: block.content,
           id: block.documentId,
-          createdAt: new Date(),
+          createdAt: new Date().toISOString(),
           userId: 'noop',
+          type: 'document'
         }
       : null;
 

@@ -1,74 +1,62 @@
-import { myProvider } from '@/lib/ai/models';
-import { sheetPrompt, updateDocumentPrompt } from '@/lib/ai/prompts';
-import { createDocumentHandler } from '@/lib/blocks/server';
 import { streamObject } from 'ai';
 import { z } from 'zod';
+
+import { myProvider } from '@/lib/ai/models';
+import { updateDocumentPrompt } from '@/lib/ai/prompts';
+import { createDocumentHandler } from '@/lib/blocks/server';
 
 export const sheetDocumentHandler = createDocumentHandler<'sheet'>({
   kind: 'sheet',
   onCreateDocument: async ({ title, dataStream }) => {
-    let draftContent = '';
-
     const { fullStream } = streamObject({
       model: myProvider.languageModel('block-model'),
-      system: sheetPrompt,
+      system: `You are a spreadsheet generator. You will generate CSV data based on the title provided.
+      The data should be well-structured and follow best practices.
+      Include headers and appropriate data types.`,
       prompt: title,
       schema: z.object({
-        csv: z.string().describe('CSV data'),
+        csv: z.string(),
       }),
     });
 
-    for await (const delta of fullStream) {
-      const { type } = delta;
+    let draftContent = '';
 
-      if (type === 'object') {
-        const { object } = delta;
-        const { csv } = object;
-
+    for await (const chunk of fullStream) {
+      if (chunk.type === 'object') {
+        const { csv } = chunk.object;
         if (csv) {
+          draftContent = csv;
           dataStream.writeData({
             type: 'sheet-delta',
             content: csv,
           });
-
-          draftContent = csv;
         }
       }
     }
 
-    dataStream.writeData({
-      type: 'sheet-delta',
-      content: draftContent,
-    });
-
     return draftContent;
   },
   onUpdateDocument: async ({ document, description, dataStream }) => {
-    let draftContent = '';
-
     const { fullStream } = streamObject({
       model: myProvider.languageModel('block-model'),
-      system: updateDocumentPrompt(document.content, 'sheet'),
+      system: updateDocumentPrompt(document.content || '', 'sheet'),
       prompt: description,
       schema: z.object({
         csv: z.string(),
       }),
     });
 
-    for await (const delta of fullStream) {
-      const { type } = delta;
+    let draftContent = '';
 
-      if (type === 'object') {
-        const { object } = delta;
-        const { csv } = object;
-
+    for await (const chunk of fullStream) {
+      if (chunk.type === 'object') {
+        const { csv } = chunk.object;
         if (csv) {
+          draftContent = csv;
           dataStream.writeData({
             type: 'sheet-delta',
             content: csv,
           });
-
-          draftContent = csv;
         }
       }
     }

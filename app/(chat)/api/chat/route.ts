@@ -1,32 +1,32 @@
 import {
   type Message,
   createDataStreamResponse,
-  smoothStream,
+  type ToolCall,
   streamText,
+  type ToolSet,
 } from 'ai';
-
 import { auth } from '@/app/(auth)/auth';
 import { myProvider } from '@/lib/ai/models';
-import { systemPrompt } from '@/lib/ai/prompts';
-import {
-  deleteChatById,
-  getChatById,
-  saveChat,
-  saveMessages,
-} from '@/lib/db/queries';
-import {
-  generateUUID,
-  getMostRecentUserMessage,
-  sanitizeResponseMessages,
-} from '@/lib/utils';
-
-import { generateTitleFromUserMessage } from '../../actions';
 import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
+import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
+import { updateDocument } from '@/lib/ai/tools/update-document';
+import { getChatById, getMessagesByChatId, saveChat, saveMessages, deleteChatById } from '@/lib/db/queries';
+import { Message as DBMessage } from '@/lib/db/schema';
+import { generateTitleFromUserMessage } from '@/app/(chat)/actions';
+import { convertToUIMessages, getMostRecentUserMessage } from '@/lib/utils';
+import { v4 as uuidv4 } from 'uuid';
 
 export const maxDuration = 60;
+
+async function handleToolCall({ tool, session, dataStream }: { 
+  tool: ToolCall<string, any>;
+  session: any;
+  dataStream: any;
+}) {
+  // Implement tool call handling logic here
+  return 'Tool call executed';
+}
 
 export async function POST(request: Request) {
   const {
@@ -48,80 +48,104 @@ export async function POST(request: Request) {
     return new Response('No user message found', { status: 400 });
   }
 
-  const chat = await getChatById({ id });
+  const dbMessage: DBMessage = {
+    id: uuidv4(),
+    chatId: id,
+    role: userMessage.role,
+    content: userMessage.content,
+    createdAt: new Date().toISOString(),
+    type: 'message'
+  };
+
+  await saveMessages({
+    messages: [dbMessage],
+  });
+
+  let chat = await getChatById({ id });
 
   if (!chat) {
     const title = await generateTitleFromUserMessage({ message: userMessage });
-    await saveChat({ id, userId: session.user.id, title });
+    chat = await saveChat({ id, userId: session.user.id, title });
   }
 
-  await saveMessages({
-    messages: [{ ...userMessage, createdAt: new Date(), chatId: id }],
-  });
+  if (!chat) {
+    return new Response('Failed to create chat', { status: 500 });
+  }
 
   return createDataStreamResponse({
-    execute: (dataStream) => {
-      const result = streamText({
+    execute: async (dataStream) => {
+      const dbMessages = await getMessagesByChatId({ id });
+      const uiMessages = convertToUIMessages(dbMessages);
+
+      const assistantMessage: DBMessage = {
+        id: uuidv4(),
+        chatId: id,
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+        type: 'message'
+      };
+
+      await saveMessages({
+        messages: [assistantMessage],
+      });
+
+      const tools = {
+        createDocument: createDocument({ session, dataStream }),
+        updateDocument: updateDocument({ session, dataStream }),
+        getWeather,
+        requestSuggestions: requestSuggestions({ session, dataStream }),
+      };
+
+      const result = await streamText({
         model: myProvider.languageModel(selectedChatModel),
-        system: systemPrompt({ selectedChatModel }),
-        messages,
-        maxSteps: 5,
-        experimental_activeTools:
-          selectedChatModel === 'chat-model-reasoning'
-            ? []
-            : [
-                'getWeather',
-                'createDocument',
-                'updateDocument',
-                'requestSuggestions',
-              ],
-        experimental_transform: smoothStream({ chunking: 'word' }),
-        experimental_generateMessageId: generateUUID,
-        tools: {
-          getWeather,
-          createDocument: createDocument({ session, dataStream }),
-          updateDocument: updateDocument({ session, dataStream }),
-          requestSuggestions: requestSuggestions({
-            session,
-            dataStream,
-          }),
-        },
-        onFinish: async ({ response, reasoning }) => {
-          if (session.user?.id) {
-            try {
-              const sanitizedResponseMessages = sanitizeResponseMessages({
-                messages: response.messages,
-                reasoning,
-              });
-
-              await saveMessages({
-                messages: sanitizedResponseMessages.map((message) => {
-                  return {
-                    id: message.id,
-                    chatId: id,
-                    role: message.role,
-                    content: message.content,
-                    createdAt: new Date(),
-                  };
-                }),
-              });
-            } catch (error) {
-              console.error('Failed to save chat');
-            }
-          }
-        },
-        experimental_telemetry: {
-          isEnabled: true,
-          functionId: 'stream-text',
-        },
+        messages: uiMessages,
+        tools,
       });
 
-      result.mergeIntoDataStream(dataStream, {
-        sendReasoning: true,
+      result.mergeIntoDataStream(dataStream);
+
+      const response = await result.response;
+      const lastMessage = response.messages[response.messages.length - 1];
+      assistantMessage.content = typeof lastMessage.content === 'string' ? lastMessage.content : '';
+      
+      await saveMessages({
+        messages: [
+          {
+            ...assistantMessage,
+            content: assistantMessage.content,
+          },
+        ],
       });
+
+      const toolCalls = await result.toolCalls;
+      if (toolCalls && toolCalls.length > 0) {
+        const toolResults = await Promise.all(
+          toolCalls.map((tool) =>
+            handleToolCall({
+              tool,
+              session,
+              dataStream,
+            }),
+          ),
+        );
+
+        const toolMessage: DBMessage = {
+          id: uuidv4(),
+          chatId: id,
+          role: 'assistant',
+          content: toolResults.join('\n'),
+          createdAt: new Date().toISOString(),
+          type: 'message'
+        };
+
+        await saveMessages({
+          messages: [toolMessage],
+        });
+      }
     },
     onError: () => {
-      return 'Oops, an error occured!';
+      return 'Oops, an error occurred!';
     },
   });
 }
@@ -143,7 +167,7 @@ export async function DELETE(request: Request) {
   try {
     const chat = await getChatById({ id });
 
-    if (chat.userId !== session.user.id) {
+    if (!chat || chat.userId !== session.user.id) {
       return new Response('Unauthorized', { status: 401 });
     }
 

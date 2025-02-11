@@ -136,10 +136,11 @@ function PureBlock({
     (updatedContent: string) => {
       if (!block) return;
 
-      mutate<Array<Document>>(
-        `/api/document?id=${block.documentId}`,
-        async (currentDocuments) => {
-          if (!currentDocuments) return undefined;
+      const key = `/api/document?id=${block.documentId}`;
+      mutate(
+        key,
+        async (currentDocuments: Document[] | undefined) => {
+          if (!currentDocuments) return currentDocuments;
 
           const currentDocument = currentDocuments.at(-1);
 
@@ -160,17 +161,17 @@ function PureBlock({
 
             setIsContentDirty(false);
 
-            const newDocument = {
+            const updatedDocument: Document = {
               ...currentDocument,
               content: updatedContent,
-              createdAt: new Date(),
+              createdAt: new Date().toISOString(),
             };
 
-            return [...currentDocuments, newDocument];
+            return [updatedDocument, ...currentDocuments.slice(1)];
           }
           return currentDocuments;
         },
-        { revalidate: false },
+        { revalidate: false }
       );
     },
     [block, mutate],
