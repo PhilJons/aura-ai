@@ -52,7 +52,9 @@ export function Chat({
       mutate('/api/history');
     },
     onError: (error) => {
-      toast.error('An error occured, please try again!');
+      if (error.message && !error.message.includes('message channel closed')) {
+        toast.error('An error occurred, please try again!');
+      }
     },
   });
 

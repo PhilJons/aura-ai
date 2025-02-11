@@ -29,13 +29,13 @@ const createModel = (modelName: string) => {
     apiVersion: '2024-02-15-preview',
   };
 
-  if (modelName === 'gpt-4') {
-    // For GPT-4, use Azure OpenAI endpoint
+  if (modelName === 'gpt-4o' || modelName === 'gpt-4o-mini') {
+    // For GPT-4o and GPT-4o mini, use Azure OpenAI endpoint
     const provider = createAzure({
       ...baseConfig,
       resourceName: process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME,
     });
-    return provider.chat('gpt-4o');
+    return provider.chat(modelName === 'gpt-4o' ? 'gpt-4o' : 'gpt-4o-mini');
   } else {
     // For DeepSeek and Llama, use Azure AI endpoint
     const deploymentMap: { [key: string]: string } = {
@@ -70,7 +70,8 @@ const createModelWithLogging = (displayName: string, modelName: string) => {
 };
 
 // Create all models using the chat interface with logging
-const gpt4 = createModelWithLogging('GPT-4', 'gpt-4');
+const gpt4o = createModelWithLogging('GPT-4o', 'gpt-4o');
+const gpt4omini = createModelWithLogging('GPT-4o mini', 'gpt-4o-mini');
 const deepseek = createModelWithLogging('DeepSeek', 'deepseek');
 const llama = createModelWithLogging('Llama', 'llama');
 
@@ -98,12 +99,12 @@ if (typeof window !== 'undefined') {
 debugLog('Creating custom provider with models');
 export const myProvider = customProvider({
   languageModels: {
-    'chat-model-small': gpt4,
-    'chat-model-large': gpt4,
+    'chat-model-small': gpt4omini,
+    'chat-model-large': gpt4o,
     'chat-model-reasoning': deepseek,
     'chat-model-advanced': llama,
-    'title-model': gpt4,
-    'block-model': gpt4,
+    'title-model': gpt4o,
+    'block-model': gpt4o,
   },
   imageModels: {
     'small-model': openai.image('dall-e-2'),
@@ -123,7 +124,7 @@ interface ChatModel {
 export const chatModels: Array<ChatModel> = [
   {
     id: 'chat-model-small',
-    name: 'GPT-4o-mini',
+    name: 'GPT-4o mini',
     description: 'Fast and efficient for most tasks',
     enabled: true,
   },

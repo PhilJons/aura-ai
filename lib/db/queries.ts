@@ -92,8 +92,12 @@ export async function saveMessages({ messages }: { messages: Array<Message> }): 
       type: 'message',
       createdAt: new Date().toISOString()
     };
-    const { resource } = await containers.messages.items.create(message);
-    savedMessages.push(resource as Message);
+    const { resource } = await containers.messages.items.upsert(message);
+    if (resource) {
+      savedMessages.push({ ...message, ...resource as unknown as Partial<Message> });
+    } else {
+      savedMessages.push(message);
+    }
   }
   return savedMessages;
 }

@@ -74,78 +74,85 @@ export async function POST(request: Request) {
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
-      const dbMessages = await getMessagesByChatId({ id });
-      const uiMessages = convertToUIMessages(dbMessages);
+      try {
+        const dbMessages = await getMessagesByChatId({ id });
+        const uiMessages = convertToUIMessages(dbMessages);
 
-      const assistantMessage: DBMessage = {
-        id: uuidv4(),
-        chatId: id,
-        role: 'assistant',
-        content: '',
-        createdAt: new Date().toISOString(),
-        type: 'message'
-      };
-
-      await saveMessages({
-        messages: [assistantMessage],
-      });
-
-      const tools = {
-        createDocument: createDocument({ session, dataStream }),
-        updateDocument: updateDocument({ session, dataStream }),
-        getWeather,
-        requestSuggestions: requestSuggestions({ session, dataStream }),
-      };
-
-      const result = await streamText({
-        model: myProvider.languageModel(selectedChatModel),
-        messages: uiMessages,
-        tools,
-      });
-
-      result.mergeIntoDataStream(dataStream);
-
-      const response = await result.response;
-      const lastMessage = response.messages[response.messages.length - 1];
-      assistantMessage.content = typeof lastMessage.content === 'string' ? lastMessage.content : '';
-      
-      await saveMessages({
-        messages: [
-          {
-            ...assistantMessage,
-            content: assistantMessage.content,
-          },
-        ],
-      });
-
-      const toolCalls = await result.toolCalls;
-      if (toolCalls && toolCalls.length > 0) {
-        const toolResults = await Promise.all(
-          toolCalls.map((tool) =>
-            handleToolCall({
-              tool,
-              session,
-              dataStream,
-            }),
-          ),
-        );
-
-        const toolMessage: DBMessage = {
-          id: uuidv4(),
+        // Generate message ID once
+        const assistantMessageId = uuidv4();
+        const assistantMessage: DBMessage = {
+          id: assistantMessageId,
           chatId: id,
           role: 'assistant',
-          content: toolResults.join('\n'),
+          content: '',
           createdAt: new Date().toISOString(),
           type: 'message'
         };
 
-        await saveMessages({
-          messages: [toolMessage],
+        // We don't need to save empty message anymore since we'll save the full one later
+        // Just keep track of the message object
+
+        const tools = {
+          createDocument: createDocument({ session, dataStream }),
+          updateDocument: updateDocument({ session, dataStream }),
+          getWeather,
+          requestSuggestions: requestSuggestions({ session, dataStream }),
+        };
+
+        const result = await streamText({
+          model: myProvider.languageModel(selectedChatModel),
+          messages: uiMessages,
+          tools,
         });
+
+        result.mergeIntoDataStream(dataStream);
+
+        const response = await result.response;
+        const lastMessage = response.messages[response.messages.length - 1];
+        assistantMessage.content = typeof lastMessage.content === 'string' ? lastMessage.content : '';
+        
+        // Save the message once with complete content
+        await saveMessages({
+          messages: [assistantMessage],
+        });
+
+        const toolCalls = await result.toolCalls;
+        if (toolCalls && toolCalls.length > 0) {
+          const toolResults = await Promise.all(
+            toolCalls.map((tool) =>
+              handleToolCall({
+                tool,
+                session,
+                dataStream,
+              }),
+            ),
+          );
+
+          const toolMessage: DBMessage = {
+            id: uuidv4(),
+            chatId: id,
+            role: 'assistant',
+            content: toolResults.join('\n'),
+            createdAt: new Date().toISOString(),
+            type: 'message'
+          };
+
+          await saveMessages({
+            messages: [toolMessage],
+          });
+        }
+      } catch (error) {
+        console.error('Error in chat stream:', error);
+        dataStream.write('2:An error occurred while processing your request. Please try again.\n');
       }
     },
-    onError: () => {
-      return 'Oops, an error occurred!';
+    onError: (error: unknown) => {
+      // Only return error message for actual errors
+      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && !error.message.includes('message channel closed')) {
+        console.error('Stream error:', error);
+        return 'An error occurred. Please try again.';
+      }
+      return '';
     },
   });
 }
