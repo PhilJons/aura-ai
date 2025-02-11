@@ -18,7 +18,7 @@ A modern, feature-rich AI chatbot built with Next.js 14, leveraging multiple AI 
 - **Language**: TypeScript
 - **Database**: Azure Cosmos DB
 - **Authentication**: Built-in auth system
-- **AI Integration**: Azure OpenAI, Fireworks AI
+- **AI Integration**: Azure OpenAI
 - **Storage**: Azure Blob Storage
 - **UI Components**: Radix UI
 - **Styling**: Tailwind CSS
