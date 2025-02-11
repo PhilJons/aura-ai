@@ -28,7 +28,7 @@ A modern, feature-rich AI chatbot built with Next.js 14, leveraging multiple AI 
 1. Clone the repository:
    ```bash
    git clone https://github.com/PhilJons/aura-ai/
-   cd ai-chatbot
+   cd aura-ai
    ```
 
 2. Install dependencies:
