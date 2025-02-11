@@ -28,20 +28,24 @@ export async function saveChat({
   id,
   userId,
   title,
+  visibility = 'private'
 }: {
   id: string;
   userId: string;
   title: string;
+  visibility?: 'private' | 'public';
 }): Promise<Chat> {
   const chat: Chat = {
     id,
     createdAt: new Date().toISOString(),
     title,
     userId,
-    visibility: 'private',
+    visibility,
     type: 'chat'
   };
+  console.log('Saving chat:', chat);
   const { resource } = await containers.chats.items.create(chat);
+  console.log('Saved chat result:', resource);
   return resource as Chat;
 }
 
@@ -72,7 +76,7 @@ export async function deleteChatById({ id }: { id: string }) {
 
 export async function getChatsByUserId({ id }: { id: string }): Promise<Chat[]> {
   const querySpec = {
-    query: 'SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC',
+    query: "SELECT * FROM c WHERE (c.userId = @userId) OR (c.visibility = 'public' AND c.type = 'chat') ORDER BY c.createdAt DESC",
     parameters: [{ name: '@userId', value: id }]
   };
   const { resources } = await containers.chats.items.query(querySpec).fetchAll();
@@ -85,6 +89,7 @@ export async function getChatById({ id }: { id: string }): Promise<Chat | undefi
 }
 
 export async function saveMessages({ messages }: { messages: Array<Message> }): Promise<Message[]> {
+  console.log('Saving messages:', messages);
   const savedMessages: Message[] = [];
   for (const msg of messages) {
     const message: Message = {
@@ -93,6 +98,7 @@ export async function saveMessages({ messages }: { messages: Array<Message> }): 
       createdAt: new Date().toISOString()
     };
     const { resource } = await containers.messages.items.upsert(message);
+    console.log('Saved message result:', resource);
     if (resource) {
       savedMessages.push({ ...message, ...resource as unknown as Partial<Message> });
     } else {
@@ -103,11 +109,14 @@ export async function saveMessages({ messages }: { messages: Array<Message> }): 
 }
 
 export async function getMessagesByChatId({ id }: { id: string }): Promise<Message[]> {
+  console.log('Getting messages for chat:', id);
   const querySpec = {
-    query: 'SELECT * FROM c WHERE c.chatId = @chatId ORDER BY c.createdAt ASC',
+    query: 'SELECT * FROM c WHERE c.chatId = @chatId AND c.type = "message" ORDER BY c.createdAt ASC',
     parameters: [{ name: '@chatId', value: id }]
   };
+  console.log('Query spec:', querySpec);
   const { resources } = await containers.messages.items.query(querySpec).fetchAll();
+  console.log('Retrieved messages:', resources);
   return resources as Message[];
 }
 

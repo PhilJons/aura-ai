@@ -9,11 +9,15 @@ import {
   updateChatVisiblityById,
 } from '@/lib/db/queries';
 import { VisibilityType } from '@/components/visibility-selector';
-import { myProvider } from '@/lib/ai/models';
+import { myProvider, chatModels, DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 
 export async function saveChatModelAsCookie(model: string) {
+  // Validate that the model exists and is enabled
+  const isValidModel = chatModels.some(m => m.id === model && m.enabled);
+  const modelToSave = isValidModel ? model : DEFAULT_CHAT_MODEL;
+  
   const cookieStore = await cookies();
-  cookieStore.set('chat-model', model);
+  cookieStore.set('chat-model', modelToSave);
 }
 
 export async function generateTitleFromUserMessage({
@@ -55,4 +59,10 @@ export async function updateChatVisibility({
   visibility: VisibilityType;
 }) {
   await updateChatVisiblityById({ chatId, visibility });
+}
+
+export async function clearChatCookies() {
+  const cookieStore = await cookies();
+  cookieStore.delete('chat-model');
+  // Add any other chat-related cookies that need to be cleared
 }

@@ -25,9 +25,11 @@ export default function Page() {
 
   useEffect(() => {
     if (state.status === 'failed') {
-      toast.error('Invalid credentials!');
+      toast.error('Invalid password!');
     } else if (state.status === 'invalid_data') {
       toast.error('Failed validating your submission!');
+    } else if (state.status === 'user_not_found') {
+      toast.error('No account found with this email. Please sign up first!');
     } else if (state.status === 'success') {
       setIsSuccessful(true);
       router.refresh();

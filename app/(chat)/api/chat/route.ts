@@ -36,36 +36,63 @@ export async function POST(request: Request) {
   }: { id: string; messages: Array<Message>; selectedChatModel: string } =
     await request.json();
 
-  const session = await auth();
+  let chat = await getChatById({ id });
+  let session = await auth();
 
-  if (!session || !session.user || !session.user.id) {
-    return new Response('Unauthorized', { status: 401 });
+  // For new chats, require authentication
+  if (!chat) {
+    if (!session || !session.user || !session.user.id) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    const userMessage = getMostRecentUserMessage(messages);
+    if (!userMessage) {
+      return new Response('No user message found', { status: 400 });
+    }
+    const title = await generateTitleFromUserMessage({ message: userMessage });
+    chat = await saveChat({ 
+      id, 
+      userId: session.user.id, 
+      title,
+      visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private'
+    });
+  } else {
+    // For existing chats, check visibility
+    if (chat.visibility === 'private') {
+      if (!session || !session.user || !session.user.id) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      if (chat.userId !== session.user.id) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+    }
+
+    // For public chats, only allow the owner to modify them
+    if (session?.user?.id && session.user.id !== chat.userId) {
+      return new Response('Unauthorized - only the chat owner can modify this chat', { status: 401 });
+    }
   }
 
   const userMessage = getMostRecentUserMessage(messages);
-
   if (!userMessage) {
     return new Response('No user message found', { status: 400 });
   }
 
-  const dbMessage: DBMessage = {
-    id: uuidv4(),
-    chatId: id,
-    role: userMessage.role,
-    content: userMessage.content,
-    createdAt: new Date().toISOString(),
-    type: 'message'
-  };
+  // Save the message if we have a valid session and either:
+  // 1. The user is the chat owner, or
+  // 2. The chat is public
+  if (session?.user?.id && (session.user.id === chat.userId || chat.visibility === 'public')) {
+    const dbMessage: DBMessage = {
+      id: uuidv4(),
+      chatId: id,
+      role: userMessage.role,
+      content: userMessage.content,
+      createdAt: new Date().toISOString(),
+      type: 'message'
+    };
 
-  await saveMessages({
-    messages: [dbMessage],
-  });
-
-  let chat = await getChatById({ id });
-
-  if (!chat) {
-    const title = await generateTitleFromUserMessage({ message: userMessage });
-    chat = await saveChat({ id, userId: session.user.id, title });
+    await saveMessages({
+      messages: [dbMessage],
+    });
   }
 
   if (!chat) {
@@ -89,14 +116,14 @@ export async function POST(request: Request) {
           type: 'message'
         };
 
-        // We don't need to save empty message anymore since we'll save the full one later
-        // Just keep track of the message object
-
-        const tools = {
+        // Only include tools if we have a valid session and are the chat owner
+        const tools: ToolSet = (session?.user?.id === chat.userId) ? {
           createDocument: createDocument({ session, dataStream }),
           updateDocument: updateDocument({ session, dataStream }),
           getWeather,
           requestSuggestions: requestSuggestions({ session, dataStream }),
+        } : {
+          getWeather,
         };
 
         const result = await streamText({
@@ -105,19 +132,77 @@ export async function POST(request: Request) {
           tools,
         });
 
+        // First merge the stream to show real-time updates to the user
         result.mergeIntoDataStream(dataStream);
 
+        // Wait for the complete response before saving
+        console.log('Waiting for complete response...');
         const response = await result.response;
-        const lastMessage = response.messages[response.messages.length - 1];
-        assistantMessage.content = typeof lastMessage.content === 'string' ? lastMessage.content : '';
+        console.log('Got complete response:', JSON.stringify(response, null, 2));
         
-        // Save the message once with complete content
-        await saveMessages({
-          messages: [assistantMessage],
-        });
+        // Find the last assistant message with actual content
+        const assistantMessages = response.messages.filter(msg => {
+          if (msg.role !== 'assistant') return false;
+          
+          // Handle different content structures
+          if (Array.isArray(msg.content)) {
+            // Handle array of content blocks
+            return msg.content.some(block => 
+              block && typeof block === 'object' && 
+              'text' in block && 
+              typeof block.text === 'string' && 
+              block.text.trim().length > 0
+            );
+          } else if (typeof msg.content === 'string') {
+            // Handle simple string content
+            return msg.content.trim().length > 0;
+          }
+          return false;
+        }).map(msg => ({
+          ...msg,
+          content: Array.isArray(msg.content) 
+            ? msg.content
+                .filter(block => block && typeof block === 'object' && 'text' in block)
+                .map(block => block.text)
+                .join('\n')
+            : msg.content
+        }));
+        
+        console.log('Filtered assistant messages:', JSON.stringify(assistantMessages, null, 2));
+        
+        if (assistantMessages.length > 0) {
+          const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+          console.log('Found last assistant message:', JSON.stringify(lastAssistantMessage, null, 2));
+          
+          // Create and save the assistant message with the complete content
+          const assistantMessage: DBMessage = {
+            id: uuidv4(),
+            chatId: id,
+            role: 'assistant',
+            content: lastAssistantMessage.content,
+            createdAt: new Date().toISOString(),
+            type: 'message'
+          };
+          console.log('Created assistant message to save:', assistantMessage);
 
+          // Only save if we have a valid session
+          if (session?.user?.id === chat.userId) {
+            console.log('User is chat owner, saving message...');
+            await saveMessages({
+              messages: [assistantMessage],
+            });
+            console.log('Successfully saved assistant message');
+          } else {
+            console.log('User is not chat owner, skipping save');
+          }
+        } else {
+          console.log('No valid assistant messages found in response');
+        }
+
+        // Handle any tool calls after the main message is saved
         const toolCalls = await result.toolCalls;
-        if (toolCalls && toolCalls.length > 0) {
+        if (toolCalls && toolCalls.length > 0 && session?.user?.id === chat.userId) {
+          console.log('Processing tool calls:', toolCalls.length);
           const toolResults = await Promise.all(
             toolCalls.map((tool) =>
               handleToolCall({
@@ -128,18 +213,21 @@ export async function POST(request: Request) {
             ),
           );
 
-          const toolMessage: DBMessage = {
-            id: uuidv4(),
-            chatId: id,
-            role: 'assistant',
-            content: toolResults.join('\n'),
-            createdAt: new Date().toISOString(),
-            type: 'message'
-          };
+          if (toolResults.some(result => result && result.trim())) {
+            console.log('Saving tool results:', toolResults);
+            const toolMessage: DBMessage = {
+              id: uuidv4(),
+              chatId: id,
+              role: 'assistant',
+              content: toolResults.filter(Boolean).join('\n'),
+              createdAt: new Date().toISOString(),
+              type: 'message'
+            };
 
-          await saveMessages({
-            messages: [toolMessage],
-          });
+            await saveMessages({
+              messages: [toolMessage],
+            });
+          }
         }
       } catch (error) {
         console.error('Error in chat stream:', error);

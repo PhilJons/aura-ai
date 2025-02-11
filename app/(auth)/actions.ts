@@ -13,7 +13,7 @@ const authFormSchema = z.object({
 });
 
 export interface LoginActionState {
-  status: 'idle' | 'in_progress' | 'success' | 'failed' | 'invalid_data';
+  status: 'idle' | 'in_progress' | 'success' | 'failed' | 'invalid_data' | 'user_not_found';
 }
 
 export const login = async (
@@ -27,6 +27,12 @@ export const login = async (
     });
 
     console.log('Login attempt for email:', validatedData.email);
+
+    // Check if user exists first
+    const user = await getUser(validatedData.email);
+    if (!user) {
+      return { status: 'user_not_found' };
+    }
 
     await signIn('credentials', {
       email: validatedData.email,

@@ -49,6 +49,10 @@ const PurePreviewMessage = ({
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
 
+  if (!message.content && message.role === 'assistant' && !isLoading) {
+    return null;
+  }
+
   return (
     <AnimatePresence>
       <motion.div
