@@ -170,8 +170,8 @@ export async function saveDocument({
     createdAt: new Date().toISOString(),
     type: 'document'
   };
-  const { resource } = await containers.documents.items.create(document);
-  return resource as Document;
+  const { resource } = await containers.documents.items.upsert(document);
+  return resource ? { ...document, ...resource as Partial<Document> } : document;
 }
 
 export async function getDocumentById({ id }: { id: string }): Promise<Document | undefined> {
