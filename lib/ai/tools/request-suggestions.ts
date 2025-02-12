@@ -1,10 +1,10 @@
-import { DataStreamWriter, streamObject, tool } from 'ai';
-import { Session } from 'next-auth';
+import { type DataStreamWriter, streamObject, tool } from 'ai';
+import type { Session } from 'next-auth';
 import { z } from 'zod';
 import { generateUUID } from '@/lib/utils';
 import { getDocumentById, saveSuggestions } from '@/lib/db/queries';
 import { myProvider } from '@/lib/ai/models';
-import { Suggestion } from '@/lib/db/schema';
+import type { Suggestion } from '@/lib/db/schema';
 
 interface RequestSuggestionsProps {
   session: Session;

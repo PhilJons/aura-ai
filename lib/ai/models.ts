@@ -24,8 +24,13 @@ const debugLog = (message: string, data?: any) => {
 };
 
 const createModel = (modelName: string) => {
+  const apiKey = process.env.NEXT_PUBLIC_AZURE_OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Azure OpenAI API key is not configured');
+  }
+
   const baseConfig = {
-    apiKey: process.env.NEXT_PUBLIC_AZURE_OPENAI_API_KEY!,
+    apiKey,
     apiVersion: '2024-02-15-preview',
   };
 

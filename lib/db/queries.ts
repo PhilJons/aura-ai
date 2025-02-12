@@ -1,5 +1,5 @@
 import 'server-only';
-import { BlockKind } from '@/components/block';
+import type { BlockKind } from '@/components/block';
 import { containers } from './cosmos';
 import type { User, Chat, Message, Vote, Document, Suggestion } from './schema';
 import { v4 as uuidv4 } from 'uuid';
