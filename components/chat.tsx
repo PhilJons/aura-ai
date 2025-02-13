@@ -99,6 +99,7 @@ export function Chat({
             messages={messages}
             setMessages={setMessages}
             append={append}
+            selectedChatModel={selectedChatModel}
           />
         )}
       </form>
