@@ -43,6 +43,7 @@ function PureMultimodalInput({
   append,
   handleSubmit,
   className,
+  selectedChatModel,
 }: {
   chatId: string;
   input: string;
@@ -64,6 +65,7 @@ function PureMultimodalInput({
     chatRequestOptions?: ChatRequestOptions,
   ) => void;
   className?: string;
+  selectedChatModel: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -156,7 +158,7 @@ function PureMultimodalInput({
 
         return {
           url,
-          name: pathname,
+          name: file.name,
           contentType: contentType,
         };
       }
@@ -208,6 +210,7 @@ function PureMultimodalInput({
         multiple
         onChange={handleFileChange}
         tabIndex={-1}
+        disabled={selectedChatModel === 'chat-model-small'}
       />
 
       {(attachments.length > 0 || uploadQueue.length > 0) && (
@@ -255,7 +258,7 @@ function PureMultimodalInput({
       />
 
       <div className="absolute bottom-0 p-2 w-fit flex flex-row justify-start">
-        <AttachmentsButton fileInputRef={fileInputRef} isLoading={isLoading} />
+        <AttachmentsButton fileInputRef={fileInputRef} isLoading={isLoading} selectedChatModel={selectedChatModel} />
       </div>
 
       <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
@@ -287,18 +290,29 @@ export const MultimodalInput = memo(
 function PureAttachmentsButton({
   fileInputRef,
   isLoading,
+  selectedChatModel,
 }: {
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
   isLoading: boolean;
+  selectedChatModel: string;
 }) {
+  const isGPT4oMini = selectedChatModel === 'chat-model-small';
+  
   return (
     <Button
-      className="rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200"
+      className={cx(
+        "rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200",
+        { "opacity-50": isGPT4oMini }
+      )}
       onClick={(event) => {
         event.preventDefault();
+        if (isGPT4oMini) {
+          toast.error('File attachments are not supported with GPT-4o Mini');
+          return;
+        }
         fileInputRef.current?.click();
       }}
-      disabled={isLoading}
+      disabled={isLoading || isGPT4oMini}
       variant="ghost"
     >
       <PaperclipIcon size={14} />

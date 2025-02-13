@@ -11,6 +11,9 @@ export const PreviewAttachment = ({
 }) => {
   const { name, url, contentType } = attachment;
 
+  // Extract the original filename from the pathname if it exists
+  const displayName = name?.split('/').pop() || 'Untitled';
+
   return (
     <div className="flex flex-col gap-2">
       <div className="w-20 h-16 aspect-video bg-muted rounded-md relative flex flex-col items-center justify-center">
@@ -21,7 +24,7 @@ export const PreviewAttachment = ({
             <img
               key={url}
               src={url}
-              alt={name ?? 'An image attachment'}
+              alt={displayName}
               className="rounded-md size-full object-cover"
             />
           ) : (
@@ -37,7 +40,7 @@ export const PreviewAttachment = ({
           </div>
         )}
       </div>
-      <div className="text-xs text-zinc-500 max-w-16 truncate">{name}</div>
+      <div className="text-xs text-zinc-500 max-w-16 truncate">{displayName}</div>
     </div>
   );
 };

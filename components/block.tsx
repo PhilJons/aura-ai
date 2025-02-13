@@ -65,6 +65,7 @@ function PureBlock({
   reload,
   votes,
   isReadonly,
+  selectedChatModel,
 }: {
   chatId: string;
   input: string;
@@ -90,6 +91,7 @@ function PureBlock({
     chatRequestOptions?: ChatRequestOptions,
   ) => Promise<string | null | undefined>;
   isReadonly: boolean;
+  selectedChatModel: string;
 }) {
   const { block, setBlock, metadata, setMetadata } = useBlock();
 
@@ -344,6 +346,7 @@ function PureBlock({
                     append={append}
                     className="bg-background dark:bg-muted"
                     setMessages={setMessages}
+                    selectedChatModel={selectedChatModel}
                   />
                 </form>
               </div>
