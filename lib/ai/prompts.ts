@@ -32,18 +32,15 @@ Do not update document right after creating it. Wait for user feedback or reques
 `;
 
 export const regularPrompt =
-  'You are a friendly assistant! Keep your responses concise and helpful.';
+  'You are a friendly assistant! Keep your responses concise and helpful. Document creation and blocks functionality is temporarily disabled - please keep all responses in the chat.';
 
 export const systemPrompt = ({
   selectedChatModel,
 }: {
   selectedChatModel: string;
 }) => {
-  if (selectedChatModel === 'chat-model-reasoning') {
-    return regularPrompt;
-  } else {
-    return `${regularPrompt}\n\n${blocksPrompt}`;
-  }
+  // Temporarily disabled document blocks functionality
+  return regularPrompt;
 };
 
 export const codePrompt = `
