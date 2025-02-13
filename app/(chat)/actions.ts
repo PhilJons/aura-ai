@@ -5,11 +5,11 @@ import { cookies } from 'next/headers';
 
 import {
   deleteMessagesByChatIdAfterTimestamp,
-  getMessageById,
   updateChatVisiblityById,
 } from '@/lib/db/queries';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { myProvider, chatModels, DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
+import { containers } from '@/lib/db/cosmos';
 
 export async function saveChatModelAsCookie(model: string) {
   // Validate that the model exists and is enabled
@@ -39,16 +39,36 @@ export async function generateTitleFromUserMessage({
 }
 
 export async function deleteTrailingMessages({ id }: { id: string }) {
-  const message = await getMessageById({ id });
-  
-  if (!message) {
-    throw new Error('Message not found');
-  }
+  try {
+    // Query for the message with both id and type
+    const querySpec = {
+      query: 'SELECT * FROM c WHERE c.id = @id AND c.type = "message"',
+      parameters: [{ name: '@id', value: id }]
+    };
+    
+    console.log('Looking up message with query:', querySpec);
+    const { resources } = await containers.messages.items.query(querySpec).fetchAll();
+    const message = resources[0];
+    
+    if (!message) {
+      console.error(`Message not found with id: ${id}`);
+      throw new Error(`Message not found with id: ${id}`);
+    }
 
-  await deleteMessagesByChatIdAfterTimestamp({
-    chatId: message.chatId,
-    timestamp: new Date(message.createdAt),
-  });
+    console.log('Found message:', message);
+    console.log('Deleting messages after timestamp:', message.createdAt);
+
+    // Delete messages after this one
+    await deleteMessagesByChatIdAfterTimestamp({
+      chatId: message.chatId,
+      timestamp: new Date(message.createdAt),
+    });
+
+    return message;
+  } catch (error) {
+    console.error('Error in deleteTrailingMessages:', error);
+    throw error;
+  }
 }
 
 export async function updateChatVisibility({

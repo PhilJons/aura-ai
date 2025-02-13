@@ -15,10 +15,12 @@ export interface Chat {
   type: 'chat';
 }
 
+export type MessageRole = 'system' | 'user' | 'assistant' | 'data' | 'tool';
+
 export interface Message {
   id: string;
   chatId: string;
-  role: string;
+  role: MessageRole;
   content: any;
   createdAt: string;
   type: 'message';

@@ -44,7 +44,7 @@ export function Chat({
   } = useChat({
     id,
     body: { id, selectedChatModel: selectedChatModel },
-    initialMessages,
+    initialMessages: initialMessages.map(msg => ({ ...msg, chatId: id })),
     experimental_throttle: 100,
     sendExtraMessageFields: true,
     generateId: generateUUID,
@@ -57,6 +57,8 @@ export function Chat({
       }
     },
   });
+
+  const messagesWithChatId = messages.map(msg => ({ ...msg, chatId: id }));
 
   const { data: votes } = useSWR<Array<Vote>>(
     `/api/vote?chatId=${id}`,
@@ -80,7 +82,7 @@ export function Chat({
           chatId={id}
           isLoading={isLoading}
           votes={votes}
-          messages={messages}
+          messages={messagesWithChatId}
           setMessages={setMessages}
           reload={reload}
           isReadonly={isReadonly}
@@ -98,7 +100,7 @@ export function Chat({
               stop={stop}
               attachments={attachments}
               setAttachments={setAttachments}
-              messages={messages}
+              messages={messagesWithChatId}
               setMessages={setMessages}
               append={append}
               selectedChatModel={selectedChatModel}
@@ -117,7 +119,7 @@ export function Chat({
         attachments={attachments}
         setAttachments={setAttachments}
         append={append}
-        messages={messages}
+        messages={messagesWithChatId}
         setMessages={setMessages}
         reload={reload}
         votes={votes}
