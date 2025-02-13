@@ -94,5 +94,9 @@ function PureBlock({
   // Feature temporarily disabled
   return null;
 }
+PureBlock.displayName = 'PureBlock';
 
-export const Block = memo(() => null, () => true);
+const Block = memo(() => null, () => true);
+Block.displayName = 'Block';
+
+export { Block };

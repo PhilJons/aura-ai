@@ -33,85 +33,11 @@ export function DocumentPreview({
   result,
   args,
 }: DocumentPreviewProps) {
-  const { block, setBlock } = useBlock();
-
-  const { data: documents, isLoading: isDocumentsFetching } = useSWR<
-    Array<Document>
-  >(result ? `/api/document?id=${result.id}` : null, fetcher);
-
-  const previewDocument = useMemo(() => documents?.[0], [documents]);
-  const hitboxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const boundingBox = hitboxRef.current?.getBoundingClientRect();
-
-    if (block.documentId && boundingBox) {
-      setBlock((block) => ({
-        ...block,
-        boundingBox: {
-          left: boundingBox.x,
-          top: boundingBox.y,
-          width: boundingBox.width,
-          height: boundingBox.height,
-        },
-      }));
-    }
-  }, [block.documentId, setBlock]);
-
-  if (block.isVisible) {
-    if (result) {
-      return (
-        <DocumentToolResult
-          type="create"
-          result={{ id: result.id, title: result.title, kind: result.kind }}
-          isReadonly={isReadonly}
-        />
-      );
-    }
-
-    if (args) {
-      return (
-        <DocumentToolCall
-          type="create"
-          args={{ title: args.title }}
-          isReadonly={isReadonly}
-        />
-      );
-    }
-  }
-
-  if (isDocumentsFetching) {
-    return <LoadingSkeleton blockKind={result.kind ?? args.kind} />;
-  }
-
-  const document: Document | null = previewDocument
-    ? previewDocument
-    : block.status === 'streaming'
-      ? {
-          title: block.title,
-          kind: block.kind,
-          content: block.content,
-          id: block.documentId,
-          createdAt: new Date().toISOString(),
-          userId: 'noop',
-          type: 'document'
-        }
-      : null;
-
-  if (!document) return <LoadingSkeleton blockKind={block.kind} />;
-
-  return (
-    <div className="relative w-full cursor-pointer">
-      <HitboxLayer hitboxRef={hitboxRef} result={result} setBlock={setBlock} />
-      <DocumentHeader
-        title={document.title}
-        kind={document.kind}
-        isStreaming={block.status === 'streaming'}
-      />
-      <DocumentContent document={document} />
-    </div>
-  );
+  // Feature temporarily disabled
+  return null;
 }
+
+DocumentPreview.displayName = 'DocumentPreview';
 
 const LoadingSkeleton = ({ blockKind }: { blockKind: BlockKind }) => (
   <div className="w-full">
