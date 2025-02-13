@@ -223,6 +223,9 @@ function PureMultimodalInput({
                 setAttachments((currentAttachments) =>
                   currentAttachments.filter((a) => a.url !== attachment.url)
                 );
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
               }}
             />
           ))}

@@ -8,6 +8,16 @@ const components: Partial<Components> = {
   // @ts-expect-error
   code: CodeBlock,
   pre: ({ children }) => <>{children}</>,
+  p: ({ node, children }) => {
+    // Check if the paragraph only contains a code block
+    if (React.Children.toArray(children).every(child => 
+      React.isValidElement(child) && 
+      (child.type === CodeBlock || (child.props && child.props.node && child.props.node.type === 'code'))
+    )) {
+      return <>{children}</>;
+    }
+    return <p>{children}</p>;
+  },
   ol: ({ node, children, ...props }) => {
     return (
       <ol className="list-decimal list-outside ml-4" {...props}>
