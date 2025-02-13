@@ -34,54 +34,7 @@ function PureDocumentToolResult({
   result,
   isReadonly,
 }: DocumentToolResultProps) {
-  const { setBlock } = useBlock();
-
-  return (
-    <button
-      type="button"
-      className="bg-background cursor-pointer border py-2 px-3 rounded-xl w-fit flex flex-row gap-3 items-start"
-      onClick={(event) => {
-        if (isReadonly) {
-          toast.error(
-            'Viewing files in shared chats is currently not supported.',
-          );
-          return;
-        }
-
-        const rect = event.currentTarget.getBoundingClientRect();
-
-        const boundingBox = {
-          top: rect.top,
-          left: rect.left,
-          width: rect.width,
-          height: rect.height,
-        };
-
-        setBlock({
-          documentId: result.id,
-          kind: result.kind,
-          content: '',
-          title: result.title,
-          isVisible: true,
-          status: 'idle',
-          boundingBox,
-        });
-      }}
-    >
-      <div className="text-muted-foreground mt-1">
-        {type === 'create' ? (
-          <FileIcon />
-        ) : type === 'update' ? (
-          <PencilEditIcon />
-        ) : type === 'request-suggestions' ? (
-          <MessageIcon />
-        ) : null}
-      </div>
-      <div className="text-left">
-        {`${getActionText(type, 'past')} "${result.title}"`}
-      </div>
-    </button>
-  );
+  return null;
 }
 
 export const DocumentToolResult = memo(PureDocumentToolResult, () => true);
@@ -97,55 +50,7 @@ function PureDocumentToolCall({
   args,
   isReadonly,
 }: DocumentToolCallProps) {
-  const { setBlock } = useBlock();
-
-  return (
-    <button
-      type="button"
-      className="cursor pointer w-fit border py-2 px-3 rounded-xl flex flex-row items-start justify-between gap-3"
-      onClick={(event) => {
-        if (isReadonly) {
-          toast.error(
-            'Viewing files in shared chats is currently not supported.',
-          );
-          return;
-        }
-
-        const rect = event.currentTarget.getBoundingClientRect();
-
-        const boundingBox = {
-          top: rect.top,
-          left: rect.left,
-          width: rect.width,
-          height: rect.height,
-        };
-
-        setBlock((currentBlock) => ({
-          ...currentBlock,
-          isVisible: true,
-          boundingBox,
-        }));
-      }}
-    >
-      <div className="flex flex-row gap-3 items-start">
-        <div className="text-zinc-500 mt-1">
-          {type === 'create' ? (
-            <FileIcon />
-          ) : type === 'update' ? (
-            <PencilEditIcon />
-          ) : type === 'request-suggestions' ? (
-            <MessageIcon />
-          ) : null}
-        </div>
-
-        <div className="text-left">
-          {`${getActionText(type, 'present')} ${args.title ? `"${args.title}"` : ''}`}
-        </div>
-      </div>
-
-      <div className="animate-spin mt-1">{<LoaderIcon />}</div>
-    </button>
-  );
+  return null;
 }
 
 export const DocumentToolCall = memo(PureDocumentToolCall, () => true);

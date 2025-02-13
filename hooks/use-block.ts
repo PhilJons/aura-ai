@@ -35,50 +35,13 @@ export function useBlockSelector<Selected>(selector: Selector<Selected>) {
 }
 
 export function useBlock() {
-  const { data: localBlock, mutate: setLocalBlock } = useSWR<UIBlock>(
-    'block',
-    null,
-    {
-      fallbackData: initialBlockData,
-    },
-  );
-
-  const block = useMemo(() => {
-    if (!localBlock) return initialBlockData;
-    return localBlock;
-  }, [localBlock]);
-
-  const setBlock = useCallback(
-    (updaterFn: UIBlock | ((currentBlock: UIBlock) => UIBlock)) => {
-      setLocalBlock((currentBlock) => {
-        const blockToUpdate = currentBlock || initialBlockData;
-
-        if (typeof updaterFn === 'function') {
-          return updaterFn(blockToUpdate);
-        }
-
-        return updaterFn;
-      });
-    },
-    [setLocalBlock],
-  );
-
-  const { data: localBlockMetadata, mutate: setLocalBlockMetadata } =
-    useSWR<any>(
-      () => (block.documentId ? `block-metadata-${block.documentId}` : null),
-      null,
-      {
-        fallbackData: null,
-      },
-    );
-
   return useMemo(
     () => ({
-      block,
-      setBlock,
-      metadata: localBlockMetadata,
-      setMetadata: setLocalBlockMetadata,
+      block: { ...initialBlockData, isVisible: false },
+      setBlock: () => {},
+      metadata: null,
+      setMetadata: () => {},
     }),
-    [block, setBlock, localBlockMetadata, setLocalBlockMetadata],
+    []
   );
 }

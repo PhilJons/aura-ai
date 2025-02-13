@@ -10,6 +10,7 @@ import {
 } from '@/lib/db/queries';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { myProvider, chatModels, DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
+import { containers } from '@/lib/db/cosmos';
 
 export async function saveChatModelAsCookie(model: string) {
   // Validate that the model exists and is enabled
@@ -65,4 +66,44 @@ export async function clearChatCookies() {
   const cookieStore = await cookies();
   cookieStore.delete('chat-model');
   // Add any other chat-related cookies that need to be cleared
+}
+
+export async function updateMessage({ id, content }: { id: string; content: string }) {
+  try {
+    const message = await getMessageById({ id });
+    
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    // Preserve the original message structure
+    const updatedMessage = {
+      id: message.id,
+      chatId: message.chatId,
+      role: message.role,
+      content: content,
+      createdAt: message.createdAt,
+      type: 'message' as const
+    };
+
+    try {
+      // Use chatId as partition key
+      const { resource } = await containers.messages.items.upsert(updatedMessage);
+      
+      if (!resource) {
+        throw new Error('Failed to update message');
+      }
+
+      // Delete all messages that came after this one
+      await deleteTrailingMessages({ id });
+
+      return resource;
+    } catch (error) {
+      console.error('Error updating message in database:', error);
+      throw new Error('Failed to update message in database');
+    }
+  } catch (error) {
+    console.error('Error in updateMessage:', error);
+    throw error; // Re-throw to handle in the UI
+  }
 }

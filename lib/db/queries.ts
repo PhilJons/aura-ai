@@ -247,8 +247,13 @@ export async function getSuggestionsByDocumentId({
 }
 
 export async function getMessageById({ id }: { id: string }): Promise<Message | undefined> {
-  const { resource } = await containers.messages.item(id, id).read();
-  return resource as Message | undefined;
+  // First get the message to find its chatId
+  const querySpec = {
+    query: 'SELECT * FROM c WHERE c.id = @id AND c.type = "message"',
+    parameters: [{ name: '@id', value: id }]
+  };
+  const { resources } = await containers.messages.items.query(querySpec).fetchAll();
+  return resources[0] as Message | undefined;
 }
 
 export async function deleteMessagesByChatIdAfterTimestamp({
