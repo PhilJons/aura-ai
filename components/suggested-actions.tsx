@@ -21,19 +21,19 @@ function PureSuggestedActions({ chatId, append }: SuggestedActionsProps) {
       action: 'What are the advantages of using Canva instead of Photoshop?',
     },
     {
-      title: 'Write code to',
-      label: `demonstrate djikstra's algorithm`,
-      action: `Write code to demonstrate djikstra's algorithm`,
+      title: 'Code a AI chatbot response system',
+      label: `that answers common customer questions`,
+      action: `Write a simple Python script using GPT-4 to generate automated responses for customer FAQs.`,
     },
     {
-      title: 'Help me write an essay',
+      title: 'Help me write a report',
       label: `about the future of AI in communication`,
-      action: `Help me write an essay about the future of AI in communication`,
+      action: `Help me write an report about the future of AI inbuilding trust and growth with business communication`,
     },
     {
-      title: 'What is the weather',
-      label: 'in Stockholm?',
-      action: 'What is the weather in Stockholm?',
+      title: 'Help me brainstorm',
+      label: 'ideas for my next clientproject',
+      action: 'Help me brainstorm ideas for my next client project, ask me questions to gather more information before we continue.',
     },
   ];
 
