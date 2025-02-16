@@ -31,6 +31,7 @@ import { codeBlock } from '@/blocks/code/client';
 import { sheetBlock } from '@/blocks/sheet/client';
 import { textBlock } from '@/blocks/text/client';
 import equal from 'fast-deep-equal';
+import { debug, debugError } from '@/lib/utils/debug';
 
 export const blockDefinitions = [textBlock, codeBlock, imageBlock, sheetBlock];
 export type BlockKind = (typeof blockDefinitions)[number]['kind'];
@@ -95,6 +96,16 @@ function PureBlock({
 }) {
   const { block, setBlock, metadata, setMetadata } = useBlock();
 
+  debug('block', 'Block component state', {
+    documentId: block.documentId,
+    status: block.status,
+    isVisible: block.isVisible,
+    kind: block.kind,
+    hasContent: !!block.content,
+    contentLength: block.content?.length,
+    isStreaming: block.status === 'streaming'
+  });
+
   const {
     data: documents,
     isLoading: isDocumentsFetching,
@@ -106,6 +117,14 @@ function PureBlock({
     fetcher,
   );
 
+  debug('block', 'Document fetch state', {
+    documentId: block.documentId,
+    isFetching: isDocumentsFetching,
+    documentsCount: documents?.length,
+    shouldFetch: block.documentId !== 'init' && block.status !== 'streaming',
+    hasDocuments: !!documents
+  });
+
   const [mode, setMode] = useState<'edit' | 'diff'>('edit');
   const [document, setDocument] = useState<Document | null>(null);
   const [currentVersionIndex, setCurrentVersionIndex] = useState(-1);
@@ -113,21 +132,50 @@ function PureBlock({
   const { open: isSidebarOpen } = useSidebar();
 
   useEffect(() => {
+    debug('block', 'Documents updated effect', {
+      documentsLength: documents?.length,
+      blockId: block.documentId,
+      currentDocument: document?.id,
+      currentVersionIndex,
+      mode
+    });
+
     if (documents && documents.length > 0) {
       const mostRecentDocument = documents.at(-1);
 
       if (mostRecentDocument) {
+        debug('block', 'Setting most recent document', {
+          documentId: mostRecentDocument.id,
+          title: mostRecentDocument.title,
+          contentLength: mostRecentDocument.content?.length,
+          createdAt: mostRecentDocument.createdAt
+        });
+
         setDocument(mostRecentDocument);
         setCurrentVersionIndex(documents.length - 1);
-        setBlock((currentBlock) => ({
-          ...currentBlock,
-          content: mostRecentDocument.content ?? '',
-        }));
+        setBlock((currentBlock) => {
+          debug('block', 'Updating block with document content', {
+            fromBlockId: currentBlock.documentId,
+            toDocumentId: mostRecentDocument.id,
+            contentLength: mostRecentDocument.content?.length
+          });
+          
+          return {
+            ...currentBlock,
+            content: mostRecentDocument.content ?? '',
+          };
+        });
       }
     }
   }, [documents, setBlock]);
 
   useEffect(() => {
+    debug('block', 'Block status changed', {
+      status: block.status,
+      documentId: block.documentId,
+      isDocumentsFetching,
+      hasDocuments: !!documents
+    });
     mutateDocuments();
   }, [block.status, mutateDocuments]);
 
@@ -138,38 +186,71 @@ function PureBlock({
     (updatedContent: string) => {
       if (!block) return;
 
+      debug('block', 'Content change triggered', {
+        documentId: block.documentId,
+        contentLength: updatedContent.length,
+        status: block.status,
+        isDirty: isContentDirty
+      });
+
       const key = `/api/document?id=${block.documentId}`;
       mutate(
         key,
         async (currentDocuments: Document[] | undefined) => {
-          if (!currentDocuments) return currentDocuments;
+          if (!currentDocuments) {
+            debug('block', 'No current documents available', {
+              documentId: block.documentId
+            });
+            return currentDocuments;
+          }
 
           const currentDocument = currentDocuments.at(-1);
 
           if (!currentDocument || !currentDocument.content) {
+            debug('block', 'No current document or content', {
+              hasDocument: !!currentDocument,
+              documentId: currentDocument?.id
+            });
             setIsContentDirty(false);
             return currentDocuments;
           }
 
           if (currentDocument.content !== updatedContent) {
-            await fetch(`/api/document?id=${block.documentId}`, {
-              method: 'POST',
-              body: JSON.stringify({
-                title: block.title,
-                content: updatedContent,
-                kind: block.kind,
-              }),
+            debug('block', 'Saving updated content', {
+              documentId: block.documentId,
+              oldLength: currentDocument.content.length,
+              newLength: updatedContent.length,
+              title: block.title
             });
 
-            setIsContentDirty(false);
+            try {
+              await fetch(`/api/document?id=${block.documentId}`, {
+                method: 'POST',
+                body: JSON.stringify({
+                  title: block.title,
+                  content: updatedContent,
+                  kind: block.kind,
+                }),
+              });
 
-            const updatedDocument: Document = {
-              ...currentDocument,
-              content: updatedContent,
-              createdAt: new Date().toISOString(),
-            };
+              debug('block', 'Content saved successfully', {
+                documentId: block.documentId,
+                contentLength: updatedContent.length
+              });
 
-            return [updatedDocument, ...currentDocuments.slice(1)];
+              setIsContentDirty(false);
+
+              const updatedDocument: Document = {
+                ...currentDocument,
+                content: updatedContent,
+                createdAt: new Date().toISOString(),
+              };
+
+              return [updatedDocument, ...currentDocuments.slice(1)];
+            } catch (error) {
+              debugError('block', 'Failed to save content', error);
+              return currentDocuments;
+            }
           }
           return currentDocuments;
         },

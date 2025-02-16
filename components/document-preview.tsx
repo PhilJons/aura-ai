@@ -21,6 +21,7 @@ import { useBlock } from '@/hooks/use-block';
 import equal from 'fast-deep-equal';
 import { SpreadsheetEditor } from './sheet-editor';
 import { ImageEditor } from './image-editor';
+import { debug } from '@/lib/utils/debug';
 
 interface DocumentPreviewProps {
   isReadonly: boolean;
@@ -34,18 +35,58 @@ export function DocumentPreview({
   args,
 }: DocumentPreviewProps) {
   const { block, setBlock } = useBlock();
+  const hitboxRef = useRef<HTMLDivElement>(null);
+
+  debug('document', 'Document preview initialization', {
+    resultId: result?.id,
+    resultTitle: result?.title,
+    resultKind: result?.kind,
+    hasArgs: !!args,
+    blockId: block.documentId,
+    blockStatus: block.status,
+    isReadonly,
+    isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1,
+    currentBlockState: {
+      isVisible: block.isVisible,
+      content: block.content?.substring(0, 100) + '...',
+      boundingBox: block.boundingBox
+    }
+  });
 
   const { data: documents, isLoading: isDocumentsFetching } = useSWR<
     Array<Document>
-  >(result ? `/api/document?id=${result.id}` : null, fetcher);
+  >(result?.id ? `/api/document?id=${result.id}` : null, fetcher);
 
-  const previewDocument = useMemo(() => documents?.[0], [documents]);
-  const hitboxRef = useRef<HTMLDivElement>(null);
+  const previewDocument = documents?.at(-1);
+
+  debug('document', 'Document data fetch state', {
+    isDocumentsFetching,
+    documentsLength: documents?.length,
+    hasPreviewDocument: !!previewDocument,
+    previewDocumentId: previewDocument?.id,
+    previewDocumentTitle: previewDocument?.title,
+    previewDocumentKind: previewDocument?.kind,
+    previewDocumentContentLength: previewDocument?.content?.length,
+    fetchUrl: result?.id ? `/api/document?id=${result.id}` : null,
+    isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+  });
 
   useEffect(() => {
     const boundingBox = hitboxRef.current?.getBoundingClientRect();
 
     if (block.documentId && boundingBox) {
+      debug('document', 'Updating block bounding box', {
+        documentId: block.documentId,
+        boundingBox: {
+          left: boundingBox.x,
+          top: boundingBox.y,
+          width: boundingBox.width,
+          height: boundingBox.height,
+        },
+        previousBoundingBox: block.boundingBox,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
+
       setBlock((block) => ({
         ...block,
         boundingBox: {
@@ -58,11 +99,32 @@ export function DocumentPreview({
     }
   }, [block.documentId, setBlock]);
 
-  if (block.isVisible) {
+  if (block.status === 'streaming') {
+    debug('document', 'Block is streaming', {
+      documentId: block.documentId,
+      title: block.title,
+      kind: block.kind,
+      hasResult: !!result,
+      hasArgs: !!args,
+      resultId: result?.id,
+      resultTitle: result?.title,
+      resultKind: result?.kind,
+      isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+    });
+
     if (result) {
+      debug('document', 'Processing document tool result', {
+        resultId: result.id,
+        resultTitle: result.title,
+        resultKind: result.kind,
+        blockId: block.documentId,
+        blockStatus: block.status,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
+
       return (
         <DocumentToolResult
-          type="create"
+          type="update"
           result={{ id: result.id, title: result.title, kind: result.kind }}
           isReadonly={isReadonly}
         />
@@ -70,6 +132,13 @@ export function DocumentPreview({
     }
 
     if (args) {
+      debug('document', 'Processing document tool call', {
+        argsTitle: args.title,
+        blockId: block.documentId,
+        blockStatus: block.status,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
+
       return (
         <DocumentToolCall
           type="create"
@@ -81,7 +150,12 @@ export function DocumentPreview({
   }
 
   if (isDocumentsFetching) {
-    return <LoadingSkeleton blockKind={result.kind ?? args.kind} />;
+    debug('document', 'Loading document skeleton', {
+      blockKind: result?.kind ?? args?.kind,
+      documentId: result?.id,
+      isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+    });
+    return <LoadingSkeleton blockKind={result?.kind ?? args?.kind} />;
   }
 
   const document: Document | null = previewDocument
@@ -98,7 +172,28 @@ export function DocumentPreview({
         }
       : null;
 
-  if (!document) return <LoadingSkeleton blockKind={block.kind} />;
+  debug('document', 'Resolved document for preview', {
+    hasDocument: !!document,
+    documentId: document?.id,
+    documentTitle: document?.title,
+    documentKind: document?.kind,
+    documentContentLength: document?.content?.length,
+    blockStatus: block.status,
+    blockVisibility: block.isVisible,
+    isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1,
+    resultId: result?.id,
+    resultTitle: result?.title
+  });
+
+  if (!document) {
+    debug('document', 'No document available, showing skeleton', {
+      blockKind: block.kind,
+      resultId: result?.id,
+      argsId: args?.id,
+      isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+    });
+    return <LoadingSkeleton blockKind={block.kind} />;
+  }
 
   return (
     <div className="relative w-full cursor-pointer">
@@ -232,6 +327,14 @@ const DocumentHeader = memo(PureDocumentHeader, (prevProps, nextProps) => {
 const DocumentContent = ({ document }: { document: Document }) => {
   const { block } = useBlock();
 
+  debug('document', 'Document content initialization', {
+    documentId: document.id,
+    documentKind: document.kind,
+    contentLength: document.content?.length,
+    blockStatus: block.status,
+    hasContent: !!document.content
+  });
+
   const containerClassName = cn(
     'h-[257px] overflow-y-scroll border rounded-b-2xl dark:bg-muted border-t-0 dark:border-zinc-700',
     {
@@ -248,6 +351,14 @@ const DocumentContent = ({ document }: { document: Document }) => {
     saveContent: () => {},
     suggestions: [],
   };
+
+  debug('document', 'Editor props prepared', {
+    documentId: document.id,
+    documentKind: document.kind,
+    contentLength: commonProps.content.length,
+    isCurrentVersion: commonProps.isCurrentVersion,
+    status: commonProps.status
+  });
 
   return (
     <div className={containerClassName}>

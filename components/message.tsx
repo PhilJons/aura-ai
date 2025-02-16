@@ -4,14 +4,9 @@ import type { ChatRequestOptions, Message } from 'ai';
 import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useState } from 'react';
-
 import type { Vote } from '@/lib/db/schema';
-
 import { DocumentToolCall, DocumentToolResult } from './document';
-import {
-  PencilEditIcon,
-  SparklesIcon,
-} from './icons';
+import { PencilEditIcon, SparklesIcon } from './icons';
 import { Markdown } from './markdown';
 import { MessageActions } from './message-actions';
 import { PreviewAttachment } from './preview-attachment';
@@ -23,6 +18,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { MessageEditor } from './message-editor';
 import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
+import { debug } from '@/lib/utils/debug';
+import { useBlock } from '@/hooks/use-block';
+import type { UIBlock } from './block';
 
 const PurePreviewMessage = ({
   chatId,
@@ -46,9 +44,62 @@ const PurePreviewMessage = ({
   isReadonly: boolean;
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const { setBlock } = useBlock();
+
+  debug('message', 'Processing message for render', {
+    messageId: message.id,
+    role: message.role,
+    contentPreview: typeof message.content === 'string' 
+      ? message.content.substring(0, 100) + '...'
+      : JSON.stringify(message.content).substring(0, 100) + '...',
+    hasToolInvocations: !!message.toolInvocations?.length,
+    toolInvocations: message.toolInvocations || []
+  });
 
   if (!message.content && message.role === 'assistant' && !isLoading) {
     return null;
+  }
+
+  // First check for tool invocations that create documents
+  const toolInvocations = message.toolInvocations || [];
+  const documentToolInvocation = toolInvocations.find(
+    t => t.toolName === 'createDocument' && t.state === 'result'
+  ) as (typeof toolInvocations[0] & { state: 'result', result: any }) | undefined;
+
+  if (documentToolInvocation) {
+    debug('message', 'Found document creation tool invocation', {
+      messageId: message.id,
+      toolCallId: documentToolInvocation.toolCallId,
+      documentId: documentToolInvocation.result.id,
+      documentTitle: documentToolInvocation.result.title,
+      documentKind: documentToolInvocation.result.kind,
+      isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+    });
+
+    // Initialize block state immediately when document tool invocation is found
+    setBlock((block: UIBlock) => {
+      debug('message', 'Updating block state with document', {
+        fromBlockId: block.documentId,
+        toDocumentId: documentToolInvocation.result.id,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
+
+      return {
+        ...block,
+        documentId: documentToolInvocation.result.id,
+        title: documentToolInvocation.result.title,
+        kind: documentToolInvocation.result.kind,
+        status: 'idle',
+        isVisible: true,
+        content: documentToolInvocation.result.content || '',
+        boundingBox: {
+          top: 0,
+          left: 0,
+          width: 0,
+          height: 0
+        }
+      };
+    });
   }
 
   return (
@@ -95,7 +146,16 @@ const PurePreviewMessage = ({
               />
             )}
 
-            {(message.content || message.reasoning) && mode === 'view' && (
+            {/* Handle document creation tool invocation */}
+            {documentToolInvocation && (
+              <DocumentPreview
+                isReadonly={isReadonly}
+                result={documentToolInvocation.result}
+              />
+            )}
+
+            {/* Only show content if not a document creation message */}
+            {!documentToolInvocation && message.content && mode === 'view' && (
               <div className="flex flex-row gap-2 items-start">
                 {message.role === 'user' && !isReadonly && (
                   <Tooltip>
@@ -120,7 +180,7 @@ const PurePreviewMessage = ({
                       message.role === 'user',
                   })}
                 >
-                  <Markdown>{message.content as string}</Markdown>
+                  <Markdown>{message.content}</Markdown>
                 </div>
               </div>
             )}
@@ -139,70 +199,62 @@ const PurePreviewMessage = ({
               </div>
             )}
 
-            {message.toolInvocations && message.toolInvocations.length > 0 && (
-              <div className="flex flex-col gap-4">
-                {message.toolInvocations.map((toolInvocation) => {
-                  const { toolName, toolCallId, state, args } = toolInvocation;
+            {/* Handle other tool invocations */}
+            {toolInvocations
+              .filter(t => t.toolName !== 'createDocument')
+              .map((toolInvocation) => {
+                const { toolName, toolCallId, state, args } = toolInvocation;
 
-                  if (state === 'result') {
-                    const { result } = toolInvocation;
+                if (state === 'result') {
+                  const { result } = toolInvocation;
 
-                    return (
-                      <div key={toolCallId}>
-                        {toolName === 'getWeather' ? (
-                          <Weather weatherAtLocation={result} />
-                        ) : toolName === 'createDocument' ? (
-                          <DocumentPreview
-                            isReadonly={isReadonly}
-                            result={result}
-                          />
-                        ) : toolName === 'updateDocument' ? (
-                          <DocumentToolResult
-                            type="update"
-                            result={result}
-                            isReadonly={isReadonly}
-                          />
-                        ) : toolName === 'requestSuggestions' ? (
-                          <DocumentToolResult
-                            type="request-suggestions"
-                            result={result}
-                            isReadonly={isReadonly}
-                          />
-                        ) : (
-                          <pre>{JSON.stringify(result, null, 2)}</pre>
-                        )}
-                      </div>
-                    );
-                  }
                   return (
-                    <div
-                      key={toolCallId}
-                      className={cx({
-                        skeleton: ['getWeather'].includes(toolName),
-                      })}
-                    >
+                    <div key={toolCallId}>
                       {toolName === 'getWeather' ? (
-                        <Weather />
-                      ) : toolName === 'createDocument' ? (
-                        <DocumentPreview isReadonly={isReadonly} args={args} />
+                        <Weather weatherAtLocation={result} />
                       ) : toolName === 'updateDocument' ? (
-                        <DocumentToolCall
+                        <DocumentToolResult
                           type="update"
-                          args={args}
+                          result={result}
                           isReadonly={isReadonly}
                         />
                       ) : toolName === 'requestSuggestions' ? (
-                        <DocumentToolCall
+                        <DocumentToolResult
                           type="request-suggestions"
-                          args={args}
+                          result={result}
                           isReadonly={isReadonly}
                         />
-                      ) : null}
+                      ) : (
+                        <pre>{JSON.stringify(result, null, 2)}</pre>
+                      )}
                     </div>
                   );
-                })}
-              </div>
-            )}
+                }
+                return (
+                  <div
+                    key={toolCallId}
+                    className={cx({
+                      skeleton: ['getWeather'].includes(toolName),
+                    })}
+                  >
+                    {toolName === 'getWeather' ? (
+                      <Weather />
+                    ) : toolName === 'updateDocument' ? (
+                      <DocumentToolCall
+                        type="update"
+                        args={args}
+                        isReadonly={isReadonly}
+                      />
+                    ) : toolName === 'requestSuggestions' ? (
+                      <DocumentToolCall
+                        type="request-suggestions"
+                        args={args}
+                        isReadonly={isReadonly}
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
 
             {!isReadonly && (
               <MessageActions
@@ -220,32 +272,23 @@ const PurePreviewMessage = ({
   );
 };
 
-export const PreviewMessage = memo(
-  PurePreviewMessage,
-  (prevProps, nextProps) => {
-    if (prevProps.isLoading !== nextProps.isLoading) return false;
-    if (prevProps.message.reasoning !== nextProps.message.reasoning)
-      return false;
-    if (prevProps.message.content !== nextProps.message.content) return false;
-    if (
-      !equal(
-        prevProps.message.toolInvocations,
-        nextProps.message.toolInvocations,
-      )
-    )
-      return false;
-    if (!equal(prevProps.vote, nextProps.vote)) return false;
+export const PreviewMessage = memo(PurePreviewMessage, (prevProps, nextProps) => {
+  if (prevProps.isLoading !== nextProps.isLoading) return false;
+  if (prevProps.message.reasoning !== nextProps.message.reasoning) return false;
+  if (prevProps.message.content !== nextProps.message.content) return false;
+  if (!equal(prevProps.message.toolInvocations, nextProps.message.toolInvocations))
+    return false;
+  if (!equal(prevProps.vote, nextProps.vote)) return false;
 
-    return true;
-  },
-);
+  return true;
+});
 
 export const ThinkingMessage = () => {
   const role = 'assistant';
 
   return (
     <motion.div
-      className="w-full mx-auto max-w-3xl px-4 group/message "
+      className="w-full mx-auto max-w-3xl px-4 group/message"
       initial={{ y: 5, opacity: 0 }}
       animate={{ y: 0, opacity: 1, transition: { delay: 1 } }}
       data-role={role}

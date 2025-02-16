@@ -3,6 +3,7 @@ import type { BlockKind } from '@/components/block';
 import { containers } from './cosmos';
 import type { User, Chat, Message, Vote, Document, Suggestion } from './schema';
 import { v4 as uuidv4 } from 'uuid';
+import { debug, debugError } from '@/lib/utils/debug';
 
 export async function getUser(email: string): Promise<User | undefined> {
   const querySpec = {
@@ -161,6 +162,14 @@ export async function saveDocument({
   content: string;
   userId: string;
 }): Promise<Document> {
+  debug('document', 'Saving document', {
+    id,
+    title,
+    kind,
+    contentLength: content.length,
+    userId
+  });
+
   const document: Document = {
     id,
     title,
@@ -170,8 +179,19 @@ export async function saveDocument({
     createdAt: new Date().toISOString(),
     type: 'document'
   };
-  const { resource } = await containers.documents.items.upsert(document);
-  return resource ? { ...document, ...resource as Partial<Document> } : document;
+
+  try {
+    const { resource } = await containers.documents.items.upsert(document);
+    debug('document', 'Document saved successfully', {
+      id: document.id,
+      title: document.title,
+      kind: document.kind
+    });
+    return resource ? { ...document, ...resource as Partial<Document> } : document;
+  } catch (error) {
+    debugError('document', 'Failed to save document', error);
+    throw error;
+  }
 }
 
 export async function getDocumentById({ id }: { id: string }): Promise<Document | undefined> {
@@ -188,30 +208,59 @@ export async function deleteDocumentsByIdAfterTimestamp({
 }) {
   const timestampStr = timestamp.toISOString();
   
-  // Delete suggestions for documents after timestamp
-  const suggestionQuerySpec = {
-    query: 'SELECT * FROM c WHERE c.documentId = @documentId AND c.documentCreatedAt > @timestamp',
-    parameters: [
-      { name: '@documentId', value: id },
-      { name: '@timestamp', value: timestampStr }
-    ]
-  };
-  const { resources: suggestions } = await containers.suggestions.items.query(suggestionQuerySpec).fetchAll();
-  for (const suggestion of suggestions) {
-    await containers.suggestions.item(suggestion.id, suggestion.documentId).delete();
-  }
+  debug('document', 'Deleting documents after timestamp', {
+    id,
+    timestamp: timestampStr
+  });
 
-  // Delete documents after timestamp
-  const documentQuerySpec = {
-    query: 'SELECT * FROM c WHERE c.id = @id AND c.createdAt > @timestamp',
-    parameters: [
-      { name: '@id', value: id },
-      { name: '@timestamp', value: timestampStr }
-    ]
-  };
-  const { resources: documents } = await containers.documents.items.query(documentQuerySpec).fetchAll();
-  for (const document of documents) {
-    await containers.documents.item(document.id, document.id).delete();
+  try {
+    // Delete suggestions for documents after timestamp
+    const suggestionQuerySpec = {
+      query: 'SELECT * FROM c WHERE c.documentId = @documentId AND c.documentCreatedAt > @timestamp',
+      parameters: [
+        { name: '@documentId', value: id },
+        { name: '@timestamp', value: timestampStr }
+      ]
+    };
+    const { resources: suggestions } = await containers.suggestions.items.query(suggestionQuerySpec).fetchAll();
+    
+    debug('document', 'Found suggestions to delete', {
+      id,
+      count: suggestions.length
+    });
+
+    for (const suggestion of suggestions) {
+      await containers.suggestions.item(suggestion.id, suggestion.documentId).delete();
+    }
+
+    // Delete documents after timestamp
+    const documentQuerySpec = {
+      query: 'SELECT * FROM c WHERE c.id = @id AND c.createdAt > @timestamp',
+      parameters: [
+        { name: '@id', value: id },
+        { name: '@timestamp', value: timestampStr }
+      ]
+    };
+    const { resources: documents } = await containers.documents.items.query(documentQuerySpec).fetchAll();
+    
+    debug('document', 'Found documents to delete', {
+      id,
+      count: documents.length,
+      timestamps: documents.map(doc => doc.createdAt)
+    });
+
+    for (const document of documents) {
+      await containers.documents.item(document.id, document.id).delete();
+    }
+
+    debug('document', 'Successfully deleted documents and suggestions', {
+      id,
+      deletedDocuments: documents.length,
+      deletedSuggestions: suggestions.length
+    });
+  } catch (error) {
+    debugError('document', 'Failed to delete documents', error);
+    throw error;
   }
 }
 
@@ -306,10 +355,24 @@ export async function updateChatVisiblityById({
 }
 
 export async function getDocumentsById({ id }: { id: string }): Promise<Document[]> {
-  const querySpec = {
-    query: 'SELECT * FROM c WHERE c.id = @id ORDER BY c.createdAt DESC',
-    parameters: [{ name: '@id', value: id }]
-  };
-  const { resources } = await containers.documents.items.query(querySpec).fetchAll();
-  return resources as Document[];
+  debug('document', 'Fetching documents by ID', { id });
+
+  try {
+    const querySpec = {
+      query: 'SELECT * FROM c WHERE c.id = @id ORDER BY c.createdAt DESC',
+      parameters: [{ name: '@id', value: id }]
+    };
+    const { resources } = await containers.documents.items.query(querySpec).fetchAll();
+    
+    debug('document', 'Documents retrieved successfully', {
+      id,
+      count: resources.length,
+      timestamps: resources.map(doc => doc.createdAt)
+    });
+
+    return resources as Document[];
+  } catch (error) {
+    debugError('document', 'Failed to fetch documents', error);
+    throw error;
+  }
 }

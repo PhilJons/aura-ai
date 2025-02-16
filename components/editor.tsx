@@ -22,6 +22,7 @@ import {
   suggestionsPlugin,
   suggestionsPluginKey,
 } from '@/lib/editor/suggestions';
+import { debug } from '@/lib/utils/debug';
 
 type EditorProps = {
   content: string;
@@ -34,15 +35,35 @@ type EditorProps = {
 
 function PureEditor({
   content,
+  isCurrentVersion,
+  currentVersionIndex,
+  status,
   onSaveContent,
   suggestions,
-  status,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
 
+  debug('document', 'Editor component initialization', {
+    contentLength: content?.length,
+    isCurrentVersion,
+    currentVersionIndex,
+    status,
+    hasSuggestions: suggestions.length > 0,
+    contentPreview: content?.substring(0, 100) + '...',
+    isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1,
+    hasContainer: !!containerRef.current,
+    hasEditor: !!editorRef.current
+  });
+
   useEffect(() => {
     if (containerRef.current && !editorRef.current) {
+      debug('document', 'Creating new editor instance', {
+        hasContainer: !!containerRef.current,
+        contentLength: content?.length,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
+
       const state = EditorState.create({
         doc: buildDocumentFromContent(content),
         plugins: [
@@ -64,10 +85,20 @@ function PureEditor({
       editorRef.current = new EditorView(containerRef.current, {
         state,
       });
+
+      debug('document', 'Editor instance created', {
+        hasEditor: !!editorRef.current,
+        stateDocSize: state.doc.content.size,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
     }
 
     return () => {
       if (editorRef.current) {
+        debug('document', 'Destroying editor instance', {
+          hasEditor: true,
+          isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+        });
         editorRef.current.destroy();
         editorRef.current = null;
       }
@@ -78,6 +109,11 @@ function PureEditor({
 
   useEffect(() => {
     if (editorRef.current) {
+      debug('document', 'Setting up transaction handler', {
+        hasEditor: true,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
+
       editorRef.current.setProps({
         dispatchTransaction: (transaction) => {
           handleTransaction({
@@ -96,8 +132,22 @@ function PureEditor({
         editorRef.current.state.doc,
       );
 
+      debug('document', 'Content update check', {
+        hasEditor: true,
+        currentContentLength: currentContent.length,
+        newContentLength: content.length,
+        status,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
+
       if (status === 'streaming') {
         const newDocument = buildDocumentFromContent(content);
+
+        debug('document', 'Streaming content update', {
+          hasEditor: true,
+          newDocumentSize: newDocument.content.size,
+          isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+        });
 
         const transaction = editorRef.current.state.tr.replaceWith(
           0,
@@ -113,6 +163,12 @@ function PureEditor({
       if (currentContent !== content) {
         const newDocument = buildDocumentFromContent(content);
 
+        debug('document', 'Non-streaming content update', {
+          hasEditor: true,
+          newDocumentSize: newDocument.content.size,
+          isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+        });
+
         const transaction = editorRef.current.state.tr.replaceWith(
           0,
           editorRef.current.state.doc.content.size,
@@ -127,6 +183,12 @@ function PureEditor({
 
   useEffect(() => {
     if (editorRef.current?.state.doc && content) {
+      debug('document', 'Processing suggestions', {
+        hasEditor: true,
+        suggestionCount: suggestions.length,
+        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+      });
+
       const projectedSuggestions = projectWithPositions(
         editorRef.current.state.doc,
         suggestions,
