@@ -43,168 +43,124 @@ function PureEditor({
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
+  const contentRef = useRef<string>(content);
+  const isInitializedRef = useRef<boolean>(false);
 
-  debug('document', 'Editor component initialization', {
-    contentLength: content?.length,
-    isCurrentVersion,
-    currentVersionIndex,
-    status,
-    hasSuggestions: suggestions.length > 0,
-    contentPreview: content?.substring(0, 100) + '...',
-    isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1,
-    hasContainer: !!containerRef.current,
-    hasEditor: !!editorRef.current
-  });
-
+  // Initialize editor only once when container is available
   useEffect(() => {
-    if (containerRef.current && !editorRef.current) {
-      debug('document', 'Creating new editor instance', {
-        hasContainer: !!containerRef.current,
-        contentLength: content?.length,
-        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-      });
-
-      const state = EditorState.create({
-        doc: buildDocumentFromContent(content),
-        plugins: [
-          ...exampleSetup({ schema: documentSchema, menuBar: false }),
-          inputRules({
-            rules: [
-              headingRule(1),
-              headingRule(2),
-              headingRule(3),
-              headingRule(4),
-              headingRule(5),
-              headingRule(6),
-            ],
-          }),
-          suggestionsPlugin,
-        ],
-      });
-
-      editorRef.current = new EditorView(containerRef.current, {
-        state,
-      });
-
-      debug('document', 'Editor instance created', {
-        hasEditor: !!editorRef.current,
-        stateDocSize: state.doc.content.size,
-        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-      });
+    if (!containerRef.current || editorRef.current || !content) {
+      return;
     }
 
+    debug('document', 'Creating editor instance', {
+      hasContainer: true,
+      contentLength: content.length,
+      isFirstInitialization: !isInitializedRef.current
+    });
+
+    const state = EditorState.create({
+      doc: buildDocumentFromContent(content),
+      plugins: [
+        ...exampleSetup({ schema: documentSchema, menuBar: false }),
+        inputRules({
+          rules: [
+            headingRule(1),
+            headingRule(2),
+            headingRule(3),
+            headingRule(4),
+            headingRule(5),
+            headingRule(6),
+          ],
+        }),
+        suggestionsPlugin,
+      ],
+    });
+
+    editorRef.current = new EditorView(containerRef.current, {
+      state,
+      dispatchTransaction: (transaction) => {
+        handleTransaction({
+          transaction,
+          editorRef,
+          onSaveContent,
+        });
+      },
+    });
+
+    isInitializedRef.current = true;
+    contentRef.current = content;
+
+    debug('document', 'Editor instance created', {
+      hasEditor: true,
+      stateDocSize: state.doc.content.size
+    });
+
+    // Cleanup function
     return () => {
       if (editorRef.current) {
         debug('document', 'Destroying editor instance', {
           hasEditor: true,
-          isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
+          contentLength: contentRef.current.length
         });
         editorRef.current.destroy();
         editorRef.current = null;
+        isInitializedRef.current = false;
       }
     };
-    // NOTE: we only want to run this effect once
-    // eslint-disable-next-line
-  }, []);
+  }, [content, onSaveContent]);
 
+  // Handle content updates only when content changes and editor exists
   useEffect(() => {
-    if (editorRef.current) {
-      debug('document', 'Setting up transaction handler', {
-        hasEditor: true,
-        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-      });
-
-      editorRef.current.setProps({
-        dispatchTransaction: (transaction) => {
-          handleTransaction({
-            transaction,
-            editorRef,
-            onSaveContent,
-          });
-        },
-      });
+    if (!editorRef.current || !content || content === contentRef.current) {
+      return;
     }
-  }, [onSaveContent]);
 
-  useEffect(() => {
-    if (editorRef.current && content) {
-      const currentContent = buildContentFromDocument(
-        editorRef.current.state.doc,
-      );
+    debug('document', 'Content update', {
+      hasEditor: true,
+      currentContentLength: contentRef.current.length,
+      newContentLength: content.length,
+      status,
+      isDifferent: content !== contentRef.current
+    });
 
-      debug('document', 'Content update check', {
-        hasEditor: true,
-        currentContentLength: currentContent.length,
-        newContentLength: content.length,
-        status,
-        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-      });
+    const newDocument = buildDocumentFromContent(content);
+    const transaction = editorRef.current.state.tr.replaceWith(
+      0,
+      editorRef.current.state.doc.content.size,
+      newDocument.content,
+    );
 
-      if (status === 'streaming') {
-        const newDocument = buildDocumentFromContent(content);
-
-        debug('document', 'Streaming content update', {
-          hasEditor: true,
-          newDocumentSize: newDocument.content.size,
-          isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-        });
-
-        const transaction = editorRef.current.state.tr.replaceWith(
-          0,
-          editorRef.current.state.doc.content.size,
-          newDocument.content,
-        );
-
-        transaction.setMeta('no-save', true);
-        editorRef.current.dispatch(transaction);
-        return;
-      }
-
-      if (currentContent !== content) {
-        const newDocument = buildDocumentFromContent(content);
-
-        debug('document', 'Non-streaming content update', {
-          hasEditor: true,
-          newDocumentSize: newDocument.content.size,
-          isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-        });
-
-        const transaction = editorRef.current.state.tr.replaceWith(
-          0,
-          editorRef.current.state.doc.content.size,
-          newDocument.content,
-        );
-
-        transaction.setMeta('no-save', true);
-        editorRef.current.dispatch(transaction);
-      }
-    }
+    transaction.setMeta('no-save', true);
+    editorRef.current.dispatch(transaction);
+    contentRef.current = content;
   }, [content, status]);
 
+  // Handle suggestions only when they change and editor exists
   useEffect(() => {
-    if (editorRef.current?.state.doc && content) {
-      debug('document', 'Processing suggestions', {
-        hasEditor: true,
-        suggestionCount: suggestions.length,
-        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-      });
-
-      const projectedSuggestions = projectWithPositions(
-        editorRef.current.state.doc,
-        suggestions,
-      ).filter(
-        (suggestion) => suggestion.selectionStart && suggestion.selectionEnd,
-      );
-
-      const decorations = createDecorations(
-        projectedSuggestions,
-        editorRef.current,
-      );
-
-      const transaction = editorRef.current.state.tr;
-      transaction.setMeta(suggestionsPluginKey, { decorations });
-      editorRef.current.dispatch(transaction);
+    if (!editorRef.current?.state.doc || !content || suggestions.length === 0) {
+      return;
     }
+
+    debug('document', 'Processing suggestions', {
+      hasEditor: true,
+      suggestionCount: suggestions.length
+    });
+
+    const projectedSuggestions = projectWithPositions(
+      editorRef.current.state.doc,
+      suggestions,
+    ).filter(
+      (suggestion) => suggestion.selectionStart && suggestion.selectionEnd,
+    );
+
+    const decorations = createDecorations(
+      projectedSuggestions,
+      editorRef.current,
+    );
+
+    const transaction = editorRef.current.state.tr;
+    transaction.setMeta(suggestionsPluginKey, { decorations });
+    editorRef.current.dispatch(transaction);
   }, [suggestions, content]);
 
   return (
