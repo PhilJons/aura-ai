@@ -149,8 +149,11 @@ const PurePreviewMessage = ({
           <div className="flex flex-col gap-4 w-full">
             {message.experimental_attachments && (
               <div className="flex flex-row justify-end gap-2">
-                {message.experimental_attachments.map((attachment) => (
-                  <PreviewAttachment key={attachment.url} attachment={attachment} />
+                {message.experimental_attachments.map((attachment, index) => (
+                  <PreviewAttachment 
+                    key={`${attachment.url || ''}-${attachment.name || ''}-${index}`}
+                    attachment={attachment} 
+                  />
                 ))}
               </div>
             )}
@@ -189,7 +192,7 @@ const PurePreviewMessage = ({
 
                 <div
                   className={cn("flex flex-col gap-4", {
-                    "bg-primary text-primary-foreground px-3 py-2 rounded-[var(--radius-lg)]":
+                    "bg-primary text-primary-foreground dark:bg-zinc-800 dark:text-foreground px-3 py-2 rounded-[var(--radius-lg)]":
                       message.role === "user"
                   })}
                 >

@@ -68,7 +68,7 @@ export function Chat({
         toolInvocations: msg.toolInvocations
       });
 
-      let parsedContent;
+      let parsedContent: any;
       try {
         parsedContent = Array.isArray(msg.content) ? msg.content[0] : JSON.parse(msg.content);
         debug('message', 'Parsed initial message content', {
