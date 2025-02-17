@@ -36,24 +36,26 @@ function PureBlockMessages({
   return (
     <div
       ref={messagesContainerRef}
-      className="flex flex-col gap-4 h-full items-center overflow-y-scroll px-4 pt-20"
+      className="flex flex-col h-full w-full items-center overflow-y-scroll px-4 pt-4"
     >
-      {messages.map((message, index) => (
-        <PreviewMessage
-          chatId={chatId}
-          key={message.id}
-          message={message}
-          isLoading={isLoading && index === messages.length - 1}
-          vote={
-            votes
-              ? votes.find((vote) => vote.messageId === message.id)
-              : undefined
-          }
-          setMessages={setMessages}
-          reload={reload}
-          isReadonly={isReadonly}
-        />
-      ))}
+      <div className="w-full max-w-[400px] flex flex-col gap-6">
+        {messages.map((message, index) => (
+          <PreviewMessage
+            chatId={chatId}
+            key={message.id}
+            message={message}
+            isLoading={isLoading && index === messages.length - 1}
+            vote={
+              votes
+                ? votes.find((vote) => vote.messageId === message.id)
+                : undefined
+            }
+            setMessages={setMessages}
+            reload={reload}
+            isReadonly={isReadonly}
+          />
+        ))}
+      </div>
 
       <div
         ref={messagesEndRef}
