@@ -92,7 +92,7 @@ function PureCodeEditor({ content, onSaveContent, status }: EditorProps) {
 
   return (
     <div
-      className="relative not-prose w-full pb-[calc(80dvh)] text-sm"
+      className="relative not-prose w-full h-[calc(80dvh)] text-sm"
       ref={containerRef}
     />
   );

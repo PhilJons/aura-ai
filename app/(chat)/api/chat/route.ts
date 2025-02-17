@@ -97,7 +97,7 @@ export async function POST(request: Request) {
               await saveMessages({
                 messages: sanitizedResponseMessages.map((message) => {
                   return {
-                    id: message.id,
+                    id: generateUUID(),
                     chatId: id,
                     role: message.role,
                     content: message.content,

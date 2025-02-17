@@ -50,6 +50,11 @@ export function generateUUID(): string {
   });
 }
 
+/**
+ * If a message is a "tool" role, merges in the tool result into the existing conversation.
+ * For normal messages, returns them as text.
+ * This function was originally ignoring attachments; we now add them.
+ */
 function addToolMessageToChat({
   toolMessage,
   messages,
@@ -65,7 +70,6 @@ function addToolMessageToChat({
           const toolResult = toolMessage.content.find(
             (tool) => tool.toolCallId === toolInvocation.toolCallId,
           );
-
           if (toolResult) {
             return {
               ...toolInvocation,
@@ -73,23 +77,25 @@ function addToolMessageToChat({
               result: toolResult.result,
             };
           }
-
           return toolInvocation;
         }),
       };
     }
-
     return message;
   });
 }
 
-export function convertToUIMessages(
-  messages: Array<DBMessage>,
-): Array<Message> {
+/**
+ * Converts Cosmos DB messages into UI messages for the chat interface.
+ * Now includes experimental_attachments so attachments persist across reload.
+ */
+export function convertToUIMessages(messages: Array<DBMessage>): Array<Message> {
   return messages.reduce((chatMessages: Array<Message>, message) => {
+    // If it's a 'tool' role, handle merging
     if (message.role === 'tool') {
+      const toolMessage = message as unknown as CoreToolMessage;
       return addToolMessageToChat({
-        toolMessage: message as CoreToolMessage,
+        toolMessage,
         messages: chatMessages,
       });
     }
@@ -97,24 +103,33 @@ export function convertToUIMessages(
     let textContent = '';
     let reasoning: string | undefined = undefined;
     const toolInvocations: Array<ToolInvocation> = [];
+    // If the DB has a top-level property 'experimental_attachments', include them
+    const experimental_attachments = (message as any).experimental_attachments ?? [];
 
     if (typeof message.content === 'string') {
+      // Just raw text
       textContent = message.content;
     } else if (Array.isArray(message.content)) {
-      for (const content of message.content) {
-        if (content.type === 'text') {
-          textContent += content.text;
-        } else if (content.type === 'tool-call') {
+      // The message content is an array of objects like {type: 'text', text: ...} or 'tool-call'
+      for (const part of message.content) {
+        if (part.type === 'text') {
+          textContent += part.text;
+        } else if (part.type === 'tool-call') {
           toolInvocations.push({
             state: 'call',
-            toolCallId: content.toolCallId,
-            toolName: content.toolName,
-            args: content.args,
+            toolCallId: part.toolCallId,
+            toolName: part.toolName,
+            args: part.args,
           });
-        } else if (content.type === 'reasoning') {
-          reasoning = content.reasoning;
+        } else if (part.type === 'reasoning') {
+          reasoning = part.reasoning;
         }
+        // In some AI flows, you may have other chunk types. If so, handle them here.
       }
+    } else {
+      // If it's an object, or anything else
+      // fallback to string
+      textContent = JSON.stringify(message.content);
     }
 
     chatMessages.push({
@@ -123,20 +138,21 @@ export function convertToUIMessages(
       content: textContent,
       reasoning,
       toolInvocations,
+      experimental_attachments,
     });
 
     return chatMessages;
   }, []);
 }
 
-type ResponseMessageWithoutId = CoreToolMessage | CoreAssistantMessage;
-type ResponseMessage = ResponseMessageWithoutId & { id: string };
-
+/**
+ * Removes any tool calls that were incomplete, etc.
+ */
 export function sanitizeResponseMessages({
   messages,
   reasoning,
 }: {
-  messages: Array<ResponseMessage>;
+  messages: Array<CoreAssistantMessage | CoreToolMessage>;
   reasoning: string | undefined;
 }) {
   const toolResultIds: Array<string> = [];
@@ -153,20 +169,19 @@ export function sanitizeResponseMessages({
 
   const messagesBySanitizedContent = messages.map((message) => {
     if (message.role !== 'assistant') return message;
-
     if (typeof message.content === 'string') return message;
 
     const sanitizedContent = message.content.filter((content) =>
       content.type === 'tool-call'
         ? toolResultIds.includes(content.toolCallId)
         : content.type === 'text'
-          ? content.text.length > 0
-          : true,
+        ? content.text.length > 0
+        : true,
     );
 
     if (reasoning) {
-      // @ts-expect-error: reasoning message parts in sdk is wip
-      sanitizedContent.push({ type: 'reasoning', reasoning });
+      // Add reasoning chunk if present
+      sanitizedContent.push({ type: 'reasoning', reasoning } as any);
     }
 
     return {
@@ -180,14 +195,15 @@ export function sanitizeResponseMessages({
   );
 }
 
+/**
+ * Remove incomplete or empty tool calls from UI messages
+ */
 export function sanitizeUIMessages(messages: Array<Message>): Array<Message> {
   const messagesBySanitizedToolInvocations = messages.map((message) => {
     if (message.role !== 'assistant') return message;
-
     if (!message.toolInvocations) return message;
 
     const toolResultIds: Array<string> = [];
-
     for (const toolInvocation of message.toolInvocations) {
       if (toolInvocation.state === 'result') {
         toolResultIds.push(toolInvocation.toolCallId);
@@ -209,7 +225,8 @@ export function sanitizeUIMessages(messages: Array<Message>): Array<Message> {
   return messagesBySanitizedToolInvocations.filter(
     (message) =>
       message.content.length > 0 ||
-      (message.toolInvocations && message.toolInvocations.length > 0),
+      (message.toolInvocations && message.toolInvocations.length > 0) ||
+      (message.experimental_attachments && message.experimental_attachments.length > 0),
   );
 }
 
@@ -224,6 +241,5 @@ export function getDocumentTimestampByIndex(
 ) {
   if (!documents) return new Date();
   if (index > documents.length) return new Date();
-
   return documents[index].createdAt;
 }
