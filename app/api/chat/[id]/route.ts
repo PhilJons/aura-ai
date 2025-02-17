@@ -1,13 +1,15 @@
-import { NextRequest } from 'next/server';
-import { Message } from 'ai';
+import type { NextRequest } from 'next/server';
+import type { Message } from 'ai';
 import { getMessagesByChatId, saveMessages } from '@/lib/db/queries';
 import { debug } from '@/lib/utils/debug';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const { id } = params;
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return new Response('Missing chat ID', { status: 400 });
+  }
   
   debug('message', 'Loading chat messages', { chatId: id });
 
@@ -33,12 +35,14 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
   const { messages }: { messages: Message[] } = await request.json();
-  const { id } = params;
+
+  if (!id) {
+    return new Response('Missing chat ID', { status: 400 });
+  }
 
   debug('message', 'Saving chat messages', { 
     chatId: id,

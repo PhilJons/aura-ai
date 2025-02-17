@@ -13,7 +13,6 @@ import {
   headingRule,
 } from '@/lib/editor/config';
 import {
-  buildContentFromDocument,
   buildDocumentFromContent,
   createDecorations,
 } from '@/lib/editor/functions';

@@ -131,6 +131,26 @@ function PureBlock({
 
   const { open: isSidebarOpen } = useSidebar();
 
+  const { width: windowWidth, height: windowHeight } = useWindowSize();
+  const isMobile = windowWidth ? windowWidth < 768 : false;
+
+  const blockDefinition = blockDefinitions.find(
+    (definition) => definition.kind === block.kind,
+  );
+
+  if (!blockDefinition) {
+    throw new Error('Block definition not found!');
+  }
+
+  useEffect(() => {
+    if (block.documentId !== 'init' && blockDefinition?.initialize) {
+      blockDefinition.initialize({
+        documentId: block.documentId,
+        setMetadata,
+      });
+    }
+  }, [block.documentId, blockDefinition, setMetadata, currentVersionIndex, document?.id, mode]);
+
   useEffect(() => {
     debug('block', 'Documents updated effect', {
       documentsLength: documents?.length,
@@ -177,7 +197,7 @@ function PureBlock({
       hasDocuments: !!documents
     });
     mutateDocuments();
-  }, [block.status, mutateDocuments]);
+  }, [block.status, block.documentId, documents, isDocumentsFetching, mutateDocuments]);
 
   const { mutate } = useSWRConfig();
   const [isContentDirty, setIsContentDirty] = useState(false);
@@ -257,7 +277,7 @@ function PureBlock({
         { revalidate: false }
       );
     },
-    [block, mutate],
+    [block, mutate, isContentDirty],
   );
 
   const debouncedHandleContentChange = useDebounceCallback(
@@ -321,28 +341,6 @@ function PureBlock({
     documents && documents.length > 0
       ? currentVersionIndex === documents.length - 1
       : true;
-
-  const { width: windowWidth, height: windowHeight } = useWindowSize();
-  const isMobile = windowWidth ? windowWidth < 768 : false;
-
-  const blockDefinition = blockDefinitions.find(
-    (definition) => definition.kind === block.kind,
-  );
-
-  if (!blockDefinition) {
-    throw new Error('Block definition not found!');
-  }
-
-  useEffect(() => {
-    if (block.documentId !== 'init') {
-      if (blockDefinition.initialize) {
-        blockDefinition.initialize({
-          documentId: block.documentId,
-          setMetadata,
-        });
-      }
-    }
-  }, [block.documentId, blockDefinition, setMetadata]);
 
   return (
     <AnimatePresence>

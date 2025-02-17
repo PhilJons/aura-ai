@@ -58,7 +58,7 @@ function StopIcon({ size = 16 }: { size?: number }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
+      <rect x="6" y="6" width="12" height="12" rx="2" ry="2" />
     </svg>
   );
 }
@@ -135,7 +135,7 @@ function PureMultimodalInput({
       const finalValue = domValue || localStorageInput || "";
       setInput(finalValue);
     }
-  }, []);
+  }, [localStorageInput, setInput]);
 
   useEffect(() => {
     setLocalStorageInput(input);
@@ -164,7 +164,7 @@ function PureMultimodalInput({
     }
   }, [attachments, handleSubmit, setAttachments, setLocalStorageInput, width, chatId]);
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = useCallback(async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -189,7 +189,7 @@ function PureMultimodalInput({
     } catch (error) {
       toast.error("Failed to upload file, please try again!");
     }
-  };
+  }, []);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -350,7 +350,7 @@ function PureMultimodalInput({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="absolute inset-0 -m-[2px] bg-gradient-to-br from-blue-50/90 to-blue-100/90 backdrop-blur-[2px] rounded-[var(--radius-lg)] border-2 border-dashed border-blue-400/50 z-50 flex items-center justify-center"
+              className="absolute inset-0 m-[-2px] bg-gradient-to-br from-blue-50/90 to-blue-100/90 backdrop-blur-[2px] rounded-[var(--radius-lg)] border-2 border-dashed border-blue-400/50 z-50 flex items-center justify-center"
             >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -360,7 +360,7 @@ function PureMultimodalInput({
                 }}
                 transition={{ 
                   duration: 3,
-                  repeat: Infinity,
+                  repeat: Number.POSITIVE_INFINITY,
                   ease: "easeInOut",
                   times: [0, 0.5, 1]
                 }}
@@ -372,25 +372,27 @@ function PureMultimodalInput({
                   }}
                   transition={{
                     duration: 3,
-                    repeat: Infinity,
+                    repeat: Number.POSITIVE_INFINITY,
                     ease: "easeInOut",
                     times: [0, 0.5, 1]
                   }}
-                  className="w-12 h-12 rounded-full bg-blue-100 border-2 border-blue-200 flex items-center justify-center"
+                  className="size-8 flex items-center justify-center"
                 >
-                  <svg 
-                    className="w-6 h-6 text-blue-500"
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
-                  >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth={2} 
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3 3m0 0l-3-3m3 3V8" 
-                    />
-                  </svg>
+                  <div className="size-6 text-blue-500">
+                    <svg 
+                      className="w-6 h-6 text-blue-500"
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3 3m0 0l-3-3m3 3V8" 
+                      />
+                    </svg>
+                  </div>
                 </motion.div>
                 <div className="flex flex-col items-center gap-1">
                   <span className="text-lg font-medium text-blue-600">

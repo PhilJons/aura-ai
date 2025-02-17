@@ -84,7 +84,7 @@ export function Chat({
         debug('message', 'Initial message is plain text', {
           messageId: msg.id,
           role: msg.role,
-          contentPreview: msg.content.substring(0, 100) + '...'
+          contentPreview: `${msg.content.substring(0, 100)}...`
         });
       }
       return { ...msg, chatId: id };

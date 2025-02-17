@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { getDocumentsById, saveDocument, deleteDocumentsByIdAfterTimestamp } from "@/lib/db/queries";
 import type { BlockKind } from "@/components/block";
 import { debug, debugError } from "@/lib/utils/debug";

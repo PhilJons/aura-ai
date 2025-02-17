@@ -18,7 +18,6 @@ import { Editor } from './editor';
 import { DocumentToolCall, DocumentToolResult } from './document';
 import { CodeEditor } from './code-editor';
 import { useBlock } from '@/hooks/use-block';
-import equal from 'fast-deep-equal';
 import { SpreadsheetEditor } from './sheet-editor';
 import { ImageEditor } from './image-editor';
 import { debug } from '@/lib/utils/debug';
@@ -49,7 +48,7 @@ export function DocumentPreview({
     isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1,
     currentBlockState: {
       isVisible: block.isVisible,
-      content: block.content?.substring(0, 100) + '...',
+      content: `${block.content?.substring(0, 100)}...`,
       boundingBox: block.boundingBox
     }
   });
@@ -111,7 +110,7 @@ export function DocumentPreview({
         },
       }));
     }
-  }, [block.documentId, setBlock]);
+  }, [block.documentId, block.boundingBox, setBlock]);
 
   useEffect(() => {
     updateBoundingBox();
@@ -446,3 +445,5 @@ const DocumentContent = memo(({ document }: { document: Document }) => {
   // No relevant changes, prevent re-render
   return true;
 });
+
+DocumentContent.displayName = 'DocumentContent';

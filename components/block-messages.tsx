@@ -36,7 +36,7 @@ function PureBlockMessages({
   return (
     <div
       ref={messagesContainerRef}
-      className="flex flex-col h-full w-full items-center overflow-y-scroll px-4 pt-4"
+      className="flex flex-col size-full items-center overflow-y-scroll px-4 pt-4"
     >
       <div className="w-full max-w-[400px] flex flex-col gap-6">
         {messages.map((message, index) => (

@@ -57,35 +57,6 @@ const PurePreviewMessage = ({
       | undefined;
   }, [message.toolInvocations]);
 
-  debug("message", "Processing message for render", {
-    messageId: message.id,
-    role: message.role,
-    contentPreview:
-      typeof message.content === "string"
-        ? message.content.substring(0, 100) + "..."
-        : JSON.stringify(message.content).substring(0, 100) + "...",
-    hasToolInvocations: !!message.toolInvocations?.length,
-    toolInvocations: message.toolInvocations || [],
-    isDocumentInitialized,
-    blockDocumentId: block.documentId
-  });
-
-  // Skip empty messages
-  if (
-    !message.content &&
-    (!message.toolInvocations || message.toolInvocations.length === 0) &&
-    message.role === "assistant" &&
-    !isLoading
-  ) {
-    return null;
-  }
-
-  // If the message has attachments or tool invocations describing documents, show them.
-  if (!message.content && message.toolInvocations?.length === 0 && message.role === "assistant" && !isLoading) {
-    // No textual content but no other reason to render? Possibly show no UI.
-    return null;
-  }
-
   useEffect(() => {
     if (documentToolInvocation && !isDocumentInitialized) {
       debug("message", "Initializing document state", {
@@ -125,7 +96,13 @@ const PurePreviewMessage = ({
 
       setIsDocumentInitialized(true);
     }
-  }, [documentToolInvocation?.result?.id, message.id, setBlock, block.documentId, isDocumentInitialized]);
+  }, [documentToolInvocation, message.id, setBlock, block.documentId, isDocumentInitialized]);
+
+  // Check if there's no content to display
+  if (!message.content && !message.toolInvocations?.length) {
+    // No textual content but no other reason to render? Possibly show no UI.
+    return null;
+  }
 
   // If this is a document message but we're still loading the document content,
   // show a loading state instead of the placeholder text

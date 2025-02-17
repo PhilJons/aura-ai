@@ -45,7 +45,7 @@ export function DataStreamHandler({ id }: { id: string }) {
       debug('block', 'Processing stream delta', {
         deltaType: delta.type,
         contentPreview: typeof delta.content === 'string' 
-          ? delta.content.substring(0, 100) + '...'
+          ? `${delta.content.substring(0, 100)}...`
           : 'suggestion object',
         blockId: block.documentId,
         blockStatus: block.status
@@ -82,7 +82,7 @@ export function DataStreamHandler({ id }: { id: string }) {
           currentStatus: draftBlock.status,
           deltaType: delta.type,
           documentId: draftBlock.documentId,
-          currentContent: draftBlock.content?.substring(0, 100) + '...'
+          currentContent: `${draftBlock.content?.substring(0, 100)}...`
         });
 
         switch (delta.type) {
