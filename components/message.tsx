@@ -3,7 +3,7 @@
 import type { ChatRequestOptions, Message } from "ai";
 import cx from "classnames";
 import { AnimatePresence, motion } from "framer-motion";
-import { memo, useState, useEffect } from "react";
+import { memo, useState, useEffect, useMemo } from "react";
 import type { Vote } from "@/lib/db/schema";
 import { DocumentToolCall, DocumentToolResult } from "./document";
 import { PencilEditIcon, SparklesIcon } from "./icons";
@@ -47,6 +47,16 @@ const PurePreviewMessage = ({
   const { block, setBlock } = useBlock();
   const [isDocumentInitialized, setIsDocumentInitialized] = useState(false);
 
+  // Memoize the document tool invocation to prevent unnecessary recalculations
+  const documentToolInvocation = useMemo(() => {
+    const toolInvocations = message.toolInvocations || [];
+    return toolInvocations.find(
+      (t) => t.toolName === "createDocument" && t.state === "result"
+    ) as
+      | (typeof toolInvocations[0] & { state: "result"; result: any })
+      | undefined;
+  }, [message.toolInvocations]);
+
   debug("message", "Processing message for render", {
     messageId: message.id,
     role: message.role,
@@ -76,14 +86,6 @@ const PurePreviewMessage = ({
     return null;
   }
 
-  // First check for tool invocations that create documents
-  const toolInvocations = message.toolInvocations || [];
-  const documentToolInvocation = toolInvocations.find(
-    (t) => t.toolName === "createDocument" && t.state === "result"
-  ) as
-    | (typeof toolInvocations[0] & { state: "result"; result: any })
-    | undefined;
-
   useEffect(() => {
     if (documentToolInvocation && !isDocumentInitialized) {
       debug("message", "Initializing document state", {
@@ -108,7 +110,7 @@ const PurePreviewMessage = ({
             title: documentToolInvocation.result.title,
             kind: documentToolInvocation.result.kind,
             status: "idle",
-            isVisible: true,
+            isVisible: false,
             content: documentToolInvocation.result.content || "",
             boundingBox: {
               top: 0,
@@ -123,7 +125,7 @@ const PurePreviewMessage = ({
 
       setIsDocumentInitialized(true);
     }
-  }, [documentToolInvocation, message.id, setBlock, block.documentId, isDocumentInitialized]);
+  }, [documentToolInvocation?.result?.id, message.id, setBlock, block.documentId, isDocumentInitialized]);
 
   // If this is a document message but we're still loading the document content,
   // show a loading state instead of the placeholder text
@@ -234,7 +236,7 @@ const PurePreviewMessage = ({
             )}
 
             {/* Handle other tool invocations */}
-            {toolInvocations
+            {(message.toolInvocations || [])
               .filter((t) => t.toolName !== "createDocument")
               .map((toolInvocation) => {
                 const { toolName, toolCallId, state, args } = toolInvocation;
@@ -307,14 +309,29 @@ const PurePreviewMessage = ({
 };
 
 export const PreviewMessage = memo(PurePreviewMessage, (prevProps, nextProps) => {
+  // Only re-render if loading state changes
   if (prevProps.isLoading !== nextProps.isLoading) return false;
-  if (prevProps.message.reasoning !== nextProps.message.reasoning) return false;
+  
+  // Re-render if message content changes
   if (prevProps.message.content !== nextProps.message.content) return false;
-  if (!equal(prevProps.message.toolInvocations, nextProps.message.toolInvocations)) {
-    return false;
+  
+  // Re-render if message reasoning changes
+  if (prevProps.message.reasoning !== nextProps.message.reasoning) return false;
+  
+  // Re-render if tool invocations change, but only if they're different
+  if (prevProps.message.toolInvocations || nextProps.message.toolInvocations) {
+    if (!equal(prevProps.message.toolInvocations, nextProps.message.toolInvocations)) {
+      return false;
+    }
   }
+  
+  // Re-render if vote changes
   if (!equal(prevProps.vote, nextProps.vote)) return false;
+  
+  // Re-render if readonly state changes
+  if (prevProps.isReadonly !== nextProps.isReadonly) return false;
 
+  // No relevant changes, prevent re-render
   return true;
 });
 

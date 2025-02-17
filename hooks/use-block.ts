@@ -2,7 +2,8 @@
 
 import useSWR from 'swr';
 import type { UIBlock } from '@/components/block';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import { debug } from '@/lib/utils/debug';
 
 export const initialBlockData: UIBlock = {
   documentId: 'init',
@@ -24,6 +25,8 @@ type Selector<T> = (state: UIBlock) => T;
 export function useBlockSelector<Selected>(selector: Selector<Selected>) {
   const { data: localBlock } = useSWR<UIBlock>('block', null, {
     fallbackData: initialBlockData,
+    revalidateOnFocus: false,
+    revalidateIfStale: false
   });
 
   const selectedValue = useMemo(() => {
@@ -40,7 +43,9 @@ export function useBlock() {
     null,
     {
       fallbackData: initialBlockData,
-    },
+      revalidateOnFocus: false,
+      revalidateIfStale: false
+    }
   );
 
   const block = useMemo(() => {
@@ -48,37 +53,82 @@ export function useBlock() {
     return localBlock;
   }, [localBlock]);
 
+  const previousBlock = useRef(block);
+
   const setBlock = useCallback(
     (updaterFn: UIBlock | ((currentBlock: UIBlock) => UIBlock)) => {
       setLocalBlock((currentBlock) => {
         const blockToUpdate = currentBlock || initialBlockData;
+        const newBlock = typeof updaterFn === 'function' ? updaterFn(blockToUpdate) : updaterFn;
 
-        if (typeof updaterFn === 'function') {
-          return updaterFn(blockToUpdate);
+        // Only update if there are actual changes
+        if (JSON.stringify(newBlock) === JSON.stringify(previousBlock.current)) {
+          debug('block', 'Skipping block update - no changes', {
+            documentId: newBlock.documentId,
+            status: newBlock.status
+          });
+          return blockToUpdate;
         }
 
-        return updaterFn;
-      });
+        debug('block', 'Updating block state', {
+          fromDocumentId: previousBlock.current.documentId,
+          toDocumentId: newBlock.documentId,
+          fromStatus: previousBlock.current.status,
+          toStatus: newBlock.status,
+          hasContentChange: previousBlock.current.content !== newBlock.content
+        });
+
+        previousBlock.current = newBlock;
+        return newBlock;
+      }, false); // Set revalidate to false to prevent unnecessary revalidation
     },
-    [setLocalBlock],
+    [setLocalBlock]
   );
 
-  const { data: localBlockMetadata, mutate: setLocalBlockMetadata } =
-    useSWR<any>(
-      () => (block.documentId ? `block-metadata-${block.documentId}` : null),
-      null,
-      {
-        fallbackData: null,
-      },
-    );
+  const { data: localBlockMetadata, mutate: setLocalBlockMetadata } = useSWR<any>(
+    () => (block.documentId ? `block-metadata-${block.documentId}` : null),
+    null,
+    {
+      fallbackData: null,
+      revalidateOnFocus: false,
+      revalidateIfStale: false
+    }
+  );
+
+  const previousMetadata = useRef(localBlockMetadata);
+
+  const setMetadata = useCallback(
+    (updaterFn: any) => {
+      setLocalBlockMetadata((currentMetadata: any) => {
+        const newMetadata = typeof updaterFn === 'function' ? updaterFn(currentMetadata) : updaterFn;
+
+        // Only update if there are actual changes
+        if (JSON.stringify(newMetadata) === JSON.stringify(previousMetadata.current)) {
+          debug('block', 'Skipping metadata update - no changes', {
+            documentId: block.documentId
+          });
+          return currentMetadata;
+        }
+
+        debug('block', 'Updating block metadata', {
+          documentId: block.documentId,
+          hasMetadataChange: true
+        });
+
+        previousMetadata.current = newMetadata;
+        return newMetadata;
+      }, false); // Set revalidate to false to prevent unnecessary revalidation
+    },
+    [block.documentId, setLocalBlockMetadata]
+  );
 
   return useMemo(
     () => ({
       block,
       setBlock,
       metadata: localBlockMetadata,
-      setMetadata: setLocalBlockMetadata,
+      setMetadata,
     }),
-    [block, setBlock, localBlockMetadata, setLocalBlockMetadata],
+    [block, setBlock, localBlockMetadata, setMetadata]
   );
 }

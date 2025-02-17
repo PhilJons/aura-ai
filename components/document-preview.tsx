@@ -36,6 +36,7 @@ export function DocumentPreview({
 }: DocumentPreviewProps) {
   const { block, setBlock } = useBlock();
   const hitboxRef = useRef<HTMLDivElement>(null);
+  const previousDocumentId = useRef<string | null>(null);
 
   debug('document', 'Document preview initialization', {
     resultId: result?.id,
@@ -53,11 +54,23 @@ export function DocumentPreview({
     }
   });
 
-  const { data: documents, isLoading: isDocumentsFetching } = useSWR<
-    Array<Document>
-  >(result?.id ? `/api/document?id=${result.id}` : null, fetcher);
+  // Memoize the document fetch key to prevent unnecessary re-fetches
+  const documentFetchKey = useMemo(() => 
+    result?.id ? `/api/document?id=${result.id}` : null,
+    [result?.id]
+  );
 
-  const previewDocument = documents?.at(-1);
+  const { data: documents, isLoading: isDocumentsFetching } = useSWR<Array<Document>>(
+    documentFetchKey,
+    fetcher,
+    {
+      revalidateOnFocus: false, // Prevent re-fetches on window focus
+      dedupingInterval: 5000, // Dedupe requests within 5 seconds
+      revalidateIfStale: false // Don't revalidate stale data automatically
+    }
+  );
+
+  const previewDocument = useMemo(() => documents?.at(-1), [documents]);
 
   debug('document', 'Document data fetch state', {
     isDocumentsFetching,
@@ -67,11 +80,12 @@ export function DocumentPreview({
     previewDocumentTitle: previewDocument?.title,
     previewDocumentKind: previewDocument?.kind,
     previewDocumentContentLength: previewDocument?.content?.length,
-    fetchUrl: result?.id ? `/api/document?id=${result.id}` : null,
+    fetchUrl: documentFetchKey,
     isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
   });
 
-  useEffect(() => {
+  // Memoize the bounding box update function
+  const updateBoundingBox = useCallback(() => {
     const boundingBox = hitboxRef.current?.getBoundingClientRect();
 
     if (block.documentId && boundingBox) {
@@ -98,6 +112,24 @@ export function DocumentPreview({
       }));
     }
   }, [block.documentId, setBlock]);
+
+  useEffect(() => {
+    updateBoundingBox();
+  }, [updateBoundingBox]);
+
+  // Handle document initialization
+  useEffect(() => {
+    if (result?.id && result.id !== previousDocumentId.current) {
+      debug('document', 'Initializing document', {
+        documentId: result.id,
+        previousDocumentId: previousDocumentId.current,
+        blockId: block.documentId,
+        blockStatus: block.status
+      });
+
+      previousDocumentId.current = result.id;
+    }
+  }, [result?.id, block.documentId, block.status]);
 
   if (block.status === 'streaming') {
     debug('document', 'Block is streaming', {
@@ -285,7 +317,10 @@ const PureHitboxLayer = ({
 };
 
 const HitboxLayer = memo(PureHitboxLayer, (prevProps, nextProps) => {
-  if (!equal(prevProps.result, nextProps.result)) return false;
+  // Only re-render if result changes in a meaningful way
+  if (prevProps.result?.id !== nextProps.result?.id) return false;
+  if (prevProps.result?.title !== nextProps.result?.title) return false;
+  if (prevProps.result?.kind !== nextProps.result?.kind) return false;
   return true;
 });
 
@@ -318,13 +353,20 @@ const PureDocumentHeader = ({
 );
 
 const DocumentHeader = memo(PureDocumentHeader, (prevProps, nextProps) => {
+  // Re-render if title changes
   if (prevProps.title !== nextProps.title) return false;
+  
+  // Re-render if kind changes
+  if (prevProps.kind !== nextProps.kind) return false;
+  
+  // Re-render if streaming state changes
   if (prevProps.isStreaming !== nextProps.isStreaming) return false;
-
+  
+  // No relevant changes, prevent re-render
   return true;
 });
 
-const DocumentContent = ({ document }: { document: Document }) => {
+const DocumentContent = memo(({ document }: { document: Document }) => {
   const { block } = useBlock();
 
   debug('document', 'Document content initialization', {
@@ -335,22 +377,25 @@ const DocumentContent = ({ document }: { document: Document }) => {
     hasContent: !!document.content
   });
 
-  const containerClassName = cn(
-    'h-[257px] overflow-y-scroll border rounded-b-2xl dark:bg-muted border-t-0 dark:border-zinc-700',
-    {
-      'p-4 sm:px-14 sm:py-16': document.kind === 'text',
-      'p-0': document.kind === 'code',
-    },
+  const containerClassName = useMemo(() => 
+    cn(
+      'h-[257px] overflow-y-scroll border rounded-b-2xl dark:bg-muted border-t-0 dark:border-zinc-700',
+      {
+        'p-4 sm:px-14 sm:py-16': document.kind === 'text',
+        'p-0': document.kind === 'code',
+      }
+    ),
+    [document.kind]
   );
 
-  const commonProps = {
+  const commonProps = useMemo(() => ({
     content: document.content ?? '',
     isCurrentVersion: true,
     currentVersionIndex: 0,
     status: block.status,
     saveContent: () => {},
     suggestions: [],
-  };
+  }), [document.content, block.status]);
 
   debug('document', 'Editor props prepared', {
     documentId: document.id,
@@ -388,4 +433,16 @@ const DocumentContent = ({ document }: { document: Document }) => {
       ) : null}
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Re-render if document content changes
+  if (prevProps.document.content !== nextProps.document.content) return false;
+  
+  // Re-render if document kind changes
+  if (prevProps.document.kind !== nextProps.document.kind) return false;
+  
+  // Re-render if document title changes (needed for image editor)
+  if (prevProps.document.title !== nextProps.document.title) return false;
+  
+  // No relevant changes, prevent re-render
+  return true;
+});
