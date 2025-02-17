@@ -7,15 +7,32 @@ import { CodeBlock } from './code-block';
 const components: Partial<Components> = {
   // @ts-expect-error
   code: CodeBlock,
-  pre: ({ children }) => <>{children}</>,
+  pre: ({ node, children }) => {
+    // Check if this pre block contains a code block
+    const codeChild = Children.toArray(children).find(child =>
+      isValidElement(child) && child.type === CodeBlock
+    );
+    
+    if (codeChild) {
+      // If it contains a code block, just return it directly
+      return codeChild;
+    }
+    
+    // Otherwise wrap in a pre tag
+    return <pre>{children}</pre>;
+  },
   p: ({ node, children }) => {
-    // Check if the paragraph only contains a code block
-    if (Children.toArray(children).every(child => 
+    // Check if the paragraph contains a code block
+    const hasCodeBlock = Children.toArray(children).some(child =>
       isValidElement(child) && 
       (child.type === CodeBlock || (child.props?.node && child.props.node.type === 'code'))
-    )) {
+    );
+
+    // If it contains a code block, render children without p wrapper
+    if (hasCodeBlock) {
       return <>{children}</>;
     }
+
     return <p>{children}</p>;
   },
   ol: ({ node, children, ...props }) => {
