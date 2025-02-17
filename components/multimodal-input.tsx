@@ -22,6 +22,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { useLocalStorage, useWindowSize } from "usehooks-ts";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { sanitizeUIMessages } from "@/lib/utils";
 import equal from "fast-deep-equal";
@@ -146,6 +147,7 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
+  const [isDragging, setIsDragging] = useState(false);
 
   const submitForm = useCallback(() => {
     window.history.replaceState({}, "", `/chat/${chatId}`);
@@ -189,6 +191,70 @@ function PureMultimodalInput({
     }
   };
 
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedChatModel || selectedChatModel === "chat-model-small") {
+      toast.error("File attachments are not supported with GPT-4o Mini");
+      return;
+    }
+    setIsDragging(true);
+  }, [selectedChatModel]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Check if we're leaving to a child element
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (
+      x <= rect.left ||
+      x >= rect.right ||
+      y <= rect.top ||
+      y >= rect.bottom
+    ) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (!selectedChatModel || selectedChatModel === "chat-model-small") {
+      toast.error("File attachments are not supported with GPT-4o Mini");
+      return;
+    }
+
+    const files = Array.from(e.dataTransfer.files);
+    setUploadQueue(files.map((file) => file.name));
+
+    try {
+      const uploadPromises = files.map((file) => uploadFile(file));
+      const uploadedAttachments = await Promise.all(uploadPromises);
+      const successfullyUploadedAttachments = uploadedAttachments.filter(
+        (attachment) => attachment !== undefined,
+      );
+
+      setAttachments((currentAttachments) => [
+        ...currentAttachments,
+        ...(successfullyUploadedAttachments as Array<Attachment>),
+      ]);
+    } catch (error) {
+      console.error("Error uploading files!", error);
+    } finally {
+      setUploadQueue([]);
+    }
+  }, [selectedChatModel, setAttachments, uploadFile]);
+
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
@@ -211,7 +277,7 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments],
+    [setAttachments, uploadFile],
   );
 
   return (
@@ -266,57 +332,160 @@ function PureMultimodalInput({
       <div
         className={cx(
           "flex items-end w-full px-4 py-2 bg-white border border-gray-200",
-          "shadow-sm focus-within:shadow-md transition-shadow duration-150",
+          "shadow-sm focus-within:shadow-md transition-all duration-300 ease-in-out",
           "rounded-[var(--radius-lg)]",
+          "relative overflow-hidden",
+          isDragging && "ring-2 ring-blue-400/50",
           className,
         )}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
-        <div className="flex items-center mb-1">
-          <AttachmentsButton
-            fileInputRef={fileInputRef}
-            isLoading={isLoading}
-            selectedChatModel={selectedChatModel}
-          />
-        </div>
-
-        <Textarea
-          ref={textareaRef}
-          placeholder="Send a message..."
-          value={input}
-          onChange={handleInput}
-          onInput={(e) => {
-            const target = e.target as HTMLTextAreaElement;
-            target.style.height = "auto";
-            const newHeight = Math.min(target.scrollHeight, 200);
-            target.style.height = `${newHeight}px`;
-            setTextareaHeight(newHeight);
-          }}
-          rows={1}
-          className="flex-1 h-auto min-h-[40px] max-h-[200px] resize-none border-none bg-transparent focus:outline-none focus:ring-0 text-base focus:ring-offset-0"
-          style={{ height: "auto" }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              if (isLoading) {
-                toast.error("Please wait for the model to finish its response!");
-              } else {
-                submitForm();
-              }
-            }
-          }}
-        />
-
-        <div className="flex items-center mb-1">
-          {isLoading ? (
-            <StopButton stop={stop} setMessages={setMessages} />
-          ) : (
-            <SendButton
-              input={input}
-              submitForm={submitForm}
-              uploadQueue={uploadQueue}
-            />
+        <AnimatePresence>
+          {isDragging && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute inset-0 -m-[2px] bg-gradient-to-br from-blue-50/90 to-blue-100/90 backdrop-blur-[2px] rounded-[var(--radius-lg)] border-2 border-dashed border-blue-400/50 z-50 flex items-center justify-center"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ 
+                  scale: [0.95, 1.02, 0.95],
+                  opacity: [0.9, 1, 0.9]
+                }}
+                transition={{ 
+                  duration: 3,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  times: [0, 0.5, 1]
+                }}
+                className="flex flex-col items-center gap-3 select-none pointer-events-none -mt-4"
+              >
+                <motion.div
+                  animate={{
+                    y: [-4, 4, -4],
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                    times: [0, 0.5, 1]
+                  }}
+                  className="w-12 h-12 rounded-full bg-blue-100 border-2 border-blue-200 flex items-center justify-center"
+                >
+                  <svg 
+                    className="w-6 h-6 text-blue-500"
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3 3m0 0l-3-3m3 3V8" 
+                    />
+                  </svg>
+                </motion.div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-lg font-medium text-blue-600">
+                    Drop files to upload
+                  </span>
+                  <span className="text-sm text-blue-500/80">
+                    Release to add your files
+                  </span>
+                </div>
+              </motion.div>
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
+
+        <motion.div 
+          className="flex w-full flex-col gap-2"
+          animate={{
+            height: isDragging ? "160px" : "auto",
+          }}
+          transition={{
+            duration: 0.3,
+            ease: "easeInOut"
+          }}
+        >
+          <Textarea
+            ref={textareaRef}
+            placeholder="Send a message..."
+            value={input}
+            onChange={handleInput}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement;
+              target.style.height = "auto";
+              const newHeight = Math.min(target.scrollHeight, 200);
+              target.style.height = `${newHeight}px`;
+              setTextareaHeight(newHeight);
+            }}
+            rows={1}
+            className="w-full min-h-[40px] max-h-[200px] resize-none border-none bg-transparent focus:outline-none focus:ring-0 text-base focus:ring-offset-0 pb-0"
+            style={{ 
+              height: isDragging ? "120px" : "auto",
+              transition: "height 0.3s ease-in-out"
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleDragEnter(e);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleDragLeave(e);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleDrop(e);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                if (isLoading) {
+                  toast.error("Please wait for the model to finish its response!");
+                } else {
+                  submitForm();
+                }
+              }
+            }}
+          />
+
+          <div className="flex w-full items-center justify-between">
+            <div className="flex items-center">
+              <AttachmentsButton
+                fileInputRef={fileInputRef}
+                isLoading={isLoading}
+                selectedChatModel={selectedChatModel}
+              />
+            </div>
+
+            <div className="flex items-center">
+              {isLoading ? (
+                <StopButton stop={stop} setMessages={setMessages} />
+              ) : (
+                <SendButton
+                  input={input}
+                  submitForm={submitForm}
+                  uploadQueue={uploadQueue}
+                />
+              )}
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
