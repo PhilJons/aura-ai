@@ -50,7 +50,7 @@ function JsonIcon({ className }: { className?: string }) {
 
 function PdfProcessingAnimation() {
   return (
-    <div className="relative w-full h-full bg-red-50 dark:bg-red-950/50 rounded-[var(--radius-sm)] flex items-center justify-center">
+    <div className="relative w-full h-full bg-red-50/80 dark:bg-red-950/50 rounded-[var(--radius-sm)] flex items-center justify-center transition-colors duration-200">
       <motion.div 
         className="w-12 h-14 relative"
         animate={{ 
@@ -64,10 +64,10 @@ function PdfProcessingAnimation() {
         }}
       >
         {/* PDF icon base */}
-        <div className="absolute inset-0 bg-red-200 dark:bg-red-800 rounded-sm" />
+        <div className="absolute inset-0 bg-red-200/90 dark:bg-red-800/80 rounded-sm transition-colors duration-200" />
         {/* Lines animation */}
         <motion.div 
-          className="absolute inset-x-2 h-1 bg-red-300 dark:bg-red-700 rounded-full"
+          className="absolute inset-x-2 h-1 bg-red-300/90 dark:bg-red-700/80 rounded-full transition-colors duration-200"
           initial={{ y: 3 }}
           animate={{ 
             y: [3, 6, 9, 6, 3],
@@ -80,7 +80,7 @@ function PdfProcessingAnimation() {
           }}
         />
         <motion.div 
-          className="absolute inset-x-2 h-1 bg-red-300 dark:bg-red-700 rounded-full"
+          className="absolute inset-x-2 h-1 bg-red-300/90 dark:bg-red-700/80 rounded-full transition-colors duration-200"
           initial={{ y: 6 }}
           animate={{ 
             y: [6, 9, 12, 9, 6],
@@ -94,7 +94,7 @@ function PdfProcessingAnimation() {
           }}
         />
         <motion.div 
-          className="absolute inset-x-2 h-1 bg-red-300 dark:bg-red-700 rounded-full"
+          className="absolute inset-x-2 h-1 bg-red-300/90 dark:bg-red-700/80 rounded-full transition-colors duration-200"
           initial={{ y: 9 }}
           animate={{ 
             y: [9, 12, 15, 12, 9],
@@ -109,7 +109,7 @@ function PdfProcessingAnimation() {
         />
       </motion.div>
       <motion.div 
-        className="absolute bottom-2 text-xs text-red-500 dark:text-red-400 font-medium"
+        className="absolute bottom-2 text-xs text-red-600 dark:text-red-400 font-medium transition-colors duration-200"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
@@ -212,7 +212,7 @@ export const PreviewAttachment = ({
                 <img 
                   src="/images/256px-PDF_file_icon.svg.png"
                   alt="PDF file"
-                  className="w-12 h-12 object-contain opacity-90 dark:opacity-80"
+                  className="w-12 h-12 object-contain opacity-90 dark:opacity-70 transition-opacity"
                 />
               </div>
             </div>

@@ -364,10 +364,14 @@ function PureMultimodalInput({
         role="button"
         tabIndex={0}
         className={cx(
-          "flex items-end w-full px-4 py-2 bg-zinc-900 border border-zinc-800",
+          "flex items-end w-full px-4 py-2",
+          "bg-background dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800",
           "shadow-sm transition-all duration-300 ease-in-out",
           "rounded-[var(--radius-lg)]",
           "relative overflow-hidden",
+          "group/input",
+          "hover:shadow-md hover:-translate-y-[1px]",
+          "focus-within:shadow-lg focus-within:-translate-y-[2px] focus-within:border-zinc-300 dark:focus-within:border-zinc-700",
           isDragging && "ring-2 ring-blue-400/50",
           className,
         )}
@@ -471,7 +475,7 @@ function PureMultimodalInput({
               setTextareaHeight(newHeight);
             }}
             rows={1}
-            className="w-full min-h-[40px] max-h-[200px] resize-none border-none bg-transparent text-foreground placeholder:text-zinc-500 text-base pb-0"
+            className="w-full min-h-[40px] max-h-[200px] resize-none border-none bg-transparent text-foreground placeholder:text-zinc-500 text-base pb-0 focus:ring-0 dark:focus:ring-0"
             style={{ 
               height: isDragging ? "120px" : "auto",
               transition: "height 0.3s ease-in-out"
@@ -550,7 +554,11 @@ function PureAttachmentsButton({
     <button
       type="button"
       className={cx(
-        "flex items-center justify-center w-8 h-8 rounded-full border border-zinc-800 hover:bg-zinc-800 text-zinc-400",
+        "flex items-center justify-center w-8 h-8 rounded-full",
+        "border border-zinc-200 dark:border-zinc-800",
+        "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
+        "text-zinc-600 dark:text-zinc-400",
+        "transition-colors duration-200"
       )}
       onClick={(event) => {
         event.preventDefault();
@@ -578,7 +586,13 @@ function PureStopButton({
 }) {
   return (
     <Button
-      className="rounded-full w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-400 border border-zinc-800"
+      className={cx(
+        "rounded-full w-8 h-8 flex items-center justify-center",
+        "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
+        "text-zinc-600 dark:text-zinc-400",
+        "border border-zinc-200 dark:border-zinc-800",
+        "transition-colors duration-200"
+      )}
       onClick={(event) => {
         event.preventDefault();
         stop();
@@ -603,7 +617,14 @@ function PureSendButton({
 }) {
   return (
     <Button
-      className="rounded-full w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-400 border border-zinc-800 disabled:opacity-40 disabled:hover:bg-zinc-800"
+      className={cx(
+        "rounded-full w-8 h-8 flex items-center justify-center",
+        "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
+        "text-zinc-600 dark:text-zinc-400",
+        "border border-zinc-200 dark:border-zinc-800",
+        "transition-colors duration-200",
+        "disabled:opacity-40 disabled:hover:bg-background dark:disabled:hover:bg-zinc-900"
+      )}
       onClick={(event) => {
         event.preventDefault();
         submitForm();
