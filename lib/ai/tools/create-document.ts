@@ -3,6 +3,7 @@ import { type DataStreamWriter, tool } from 'ai';
 import { z } from 'zod';
 import type { Session } from 'next-auth';
 import { blockKinds, documentHandlersByBlockKind } from '@/lib/blocks/server';
+import { debug } from '@/lib/utils/debug';
 
 interface CreateDocumentProps {
   session: Session;
@@ -19,12 +20,21 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
     }),
     execute: async ({ title, kind }) => {
       const id = generateUUID();
+      
+      debug('document', 'Creating document:', {
+        id,
+        title,
+        kind,
+        userId: session.user?.id
+      });
 
+      // Send kind first
       dataStream.writeData({
         type: 'kind',
         content: kind,
       });
 
+      // Then send the ID - this must match what we save to the database
       dataStream.writeData({
         type: 'id',
         content: id,
@@ -50,16 +60,22 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
       }
 
       await documentHandler.onCreateDocument({
-        id,
+        id, // Pass the same ID
         title,
         dataStream,
         session,
       });
 
+      debug('document', 'Document created successfully:', {
+        id,
+        title,
+        kind
+      });
+
       dataStream.writeData({ type: 'finish', content: '' });
 
       return {
-        id,
+        id, // Return the same ID
         title,
         kind,
         content: 'A document was created and is now visible to the user.',

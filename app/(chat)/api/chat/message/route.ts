@@ -1,6 +1,40 @@
 import { auth } from '@/app/(auth)/auth';
 import { containers } from '@/lib/db/cosmos';
 import type { Message } from '@/lib/db/schema';
+import { getMessagesByChatId } from '@/lib/db/queries';
+import { debug } from '@/lib/utils/debug';
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('chatId');
+
+  if (!id) {
+    return new Response('Missing chat ID', { status: 400 });
+  }
+  
+  debug('message', 'Loading chat messages', { chatId: id });
+
+  try {
+    const messages = await getMessagesByChatId({ id });
+    
+    debug('message', 'Chat messages loaded', { 
+      chatId: id,
+      messageCount: messages.length,
+      hasDocuments: messages.some(msg => 
+        msg.content.includes('"kind":') && 
+        (msg.content.includes('"text"') || 
+         msg.content.includes('"code"') || 
+         msg.content.includes('"image"') || 
+         msg.content.includes('"sheet"'))
+      )
+    });
+
+    return Response.json(messages);
+  } catch (error) {
+    console.error('Error loading messages:', error);
+    return new Response('Error loading messages', { status: 500 });
+  }
+}
 
 export async function PATCH(request: Request) {
   const session = await auth();

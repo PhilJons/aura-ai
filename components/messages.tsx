@@ -1,10 +1,11 @@
-import type { ChatRequestOptions, Message } from 'ai';
+import { ChatRequestOptions, Message } from 'ai';
 import { PreviewMessage, ThinkingMessage } from './message';
 import { useScrollToBottom } from './use-scroll-to-bottom';
 import { Overview } from './overview';
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import equal from 'fast-deep-equal';
+import { debug } from '@/lib/utils/debug';
 
 interface MessagesProps {
   chatId: string;
@@ -32,6 +33,19 @@ function PureMessages({
 }: MessagesProps) {
   const [messagesContainerRef, messagesEndRef] =
     useScrollToBottom<HTMLDivElement>();
+
+  useEffect(() => {
+    debug('messages', 'Messages state updated', {
+      messageCount: messages.length,
+      messages: messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        hasToolInvocations: !!m.toolInvocations?.length,
+        toolInvocationStates: m.toolInvocations?.map(t => t.state)
+      })),
+      isLoading
+    });
+  }, [messages, isLoading]);
 
   return (
     <div
@@ -70,8 +84,6 @@ function PureMessages({
 }
 
 export const Messages = memo(PureMessages, (prevProps, nextProps) => {
-  if (prevProps.isBlockVisible && nextProps.isBlockVisible) return true;
-
   if (prevProps.isLoading !== nextProps.isLoading) return false;
   if (prevProps.isLoading && nextProps.isLoading) return false;
   if (prevProps.messages.length !== nextProps.messages.length) return false;

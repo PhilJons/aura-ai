@@ -65,22 +65,4 @@ function PureBlockMessages({
   );
 }
 
-function areEqual(
-  prevProps: BlockMessagesProps,
-  nextProps: BlockMessagesProps,
-) {
-  if (
-    prevProps.blockStatus === 'streaming' &&
-    nextProps.blockStatus === 'streaming'
-  )
-    return true;
-
-  if (prevProps.isLoading !== nextProps.isLoading) return false;
-  if (prevProps.isLoading && nextProps.isLoading) return false;
-  if (prevProps.messages.length !== nextProps.messages.length) return false;
-  if (!equal(prevProps.votes, nextProps.votes)) return false;
-
-  return true;
-}
-
-export const BlockMessages = memo(PureBlockMessages, areEqual);
+export const BlockMessages = memo(PureBlockMessages);

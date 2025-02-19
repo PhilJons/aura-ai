@@ -35,7 +35,8 @@ export function DataStreamHandler({ id }: { id: string }) {
       lastProcessedIndex: lastProcessedIndex.current,
       blockId: block.documentId,
       blockStatus: block.status,
-      newDeltasCount: dataStream.length - (lastProcessedIndex.current + 1)
+      newDeltasCount: dataStream.length - (lastProcessedIndex.current + 1),
+      lastDelta: dataStream[dataStream.length - 1]
     });
 
     const newDeltas = dataStream.slice(lastProcessedIndex.current + 1);
@@ -135,7 +136,17 @@ export function DataStreamHandler({ id }: { id: string }) {
               documentId: draftBlock.documentId,
               title: draftBlock.title,
               kind: draftBlock.kind,
-              contentLength: draftBlock.content?.length
+              contentLength: draftBlock.content?.length,
+              streamState: {
+                totalDeltas: dataStream.length,
+                currentIndex: lastProcessedIndex.current,
+                remainingDeltas: dataStream.length - lastProcessedIndex.current - 1
+              },
+              blockState: {
+                previousStatus: draftBlock.status,
+                isVisible: draftBlock.isVisible,
+                hasContent: !!draftBlock.content
+              }
             });
             return {
               ...draftBlock,

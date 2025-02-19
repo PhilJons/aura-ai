@@ -3,7 +3,7 @@
 import type { ChatRequestOptions, Message } from "ai";
 import cx from "classnames";
 import { AnimatePresence, motion } from "framer-motion";
-import { memo, useState, useEffect, useMemo } from "react";
+import { memo, useState, useEffect, useMemo, useRef } from "react";
 import type { Vote } from "@/lib/db/schema";
 import { DocumentToolCall, DocumentToolResult } from "./document";
 import { PencilEditIcon, SparklesIcon } from "./icons";
@@ -46,42 +46,52 @@ const PurePreviewMessage = ({
   const [mode, setMode] = useState<"view" | "edit">("view");
   const { block, setBlock } = useBlock();
   const [isDocumentInitialized, setIsDocumentInitialized] = useState(false);
+  const originalMessageId = useRef(message.id);
+
+  // Use the original message ID for tool invocations to maintain stability
+  const messageWithStableId = useMemo(() => ({
+    ...message,
+    id: originalMessageId.current
+  }), [message]);
 
   // Memoize the document tool invocation to prevent unnecessary recalculations
   const documentToolInvocation = useMemo(() => {
-    const toolInvocations = message.toolInvocations || [];
+    const toolInvocations = messageWithStableId.toolInvocations || [];
     return toolInvocations.find(
       (t) => t.toolName === "createDocument" && t.state === "result"
     ) as
       | (typeof toolInvocations[0] & { state: "result"; result: any })
       | undefined;
-  }, [message.toolInvocations]);
+  }, [messageWithStableId.toolInvocations]);
 
   useEffect(() => {
     if (documentToolInvocation && !isDocumentInitialized) {
       debug("message", "Initializing document state", {
-        messageId: message.id,
+        messageId: messageWithStableId.id,
         toolCallId: documentToolInvocation.toolCallId,
         documentId: documentToolInvocation.result.id,
         currentBlockId: block.documentId,
         isFirstInitialization: !isDocumentInitialized
       });
 
-      setBlock((block: UIBlock) => {
+      // Use a function to update block state to ensure we have latest values
+      setBlock((currentBlock: UIBlock) => {
         // Only update if this is a new document or we haven't initialized yet
-        if (block.documentId === "init" || block.documentId !== documentToolInvocation.result.id) {
+        if (currentBlock.documentId === "init" || currentBlock.documentId !== documentToolInvocation.result.id) {
           debug("message", "Updating block state with document", {
-            fromBlockId: block.documentId,
-            toDocumentId: documentToolInvocation.result.id
+            fromBlockId: currentBlock.documentId,
+            toDocumentId: documentToolInvocation.result.id,
+            isNewDocument: currentBlock.documentId === "init",
+            hasContentChange: currentBlock.content !== (documentToolInvocation.result.content || "")
           });
 
           return {
-            ...block,
+            ...currentBlock,
             documentId: documentToolInvocation.result.id,
             title: documentToolInvocation.result.title,
             kind: documentToolInvocation.result.kind,
             status: "idle",
-            isVisible: false,
+            isVisible: true, // Make document visible immediately
             content: documentToolInvocation.result.content || "",
             boundingBox: {
               top: 0,
@@ -91,15 +101,31 @@ const PurePreviewMessage = ({
             }
           };
         }
-        return block;
+        return currentBlock;
       });
 
+      // Mark as initialized only after state is updated
       setIsDocumentInitialized(true);
     }
-  }, [documentToolInvocation, message.id, setBlock, block.documentId, isDocumentInitialized]);
+  }, [documentToolInvocation, messageWithStableId.id, setBlock, block.documentId, isDocumentInitialized]);
+
+  useEffect(() => {
+    debug('message', 'Message rendered', {
+      messageId: messageWithStableId.id,
+      role: messageWithStableId.role,
+      content: messageWithStableId.content?.substring(0, 100) + '...',
+      hasToolInvocations: !!messageWithStableId.toolInvocations?.length,
+      toolInvocations: messageWithStableId.toolInvocations?.map(t => ({
+        state: t.state,
+        toolName: t.toolName,
+        toolCallId: t.toolCallId
+      })),
+      isLoading
+    });
+  }, [messageWithStableId, isLoading]);
 
   // Check if there's no content to display
-  if (!message.content && !message.toolInvocations?.length) {
+  if (!messageWithStableId.content && !messageWithStableId.toolInvocations?.length) {
     // No textual content but no other reason to render? Possibly show no UI.
     return null;
   }
@@ -127,7 +153,8 @@ const PurePreviewMessage = ({
         className="w-full mx-auto max-w-3xl px-4 group/message"
         initial={{ y: 5, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        data-role={message.role}
+        data-role={messageWithStableId.role}
+        data-message-id={messageWithStableId.id}
       >
         <div
           className={cn(
@@ -138,7 +165,7 @@ const PurePreviewMessage = ({
             }
           )}
         >
-          {message.role === "assistant" && (
+          {messageWithStableId.role === "assistant" && (
             <div className="size-8 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border bg-background">
               <div className="translate-y-px">
                 <SparklesIcon size={14} />
@@ -147,9 +174,9 @@ const PurePreviewMessage = ({
           )}
 
           <div className="flex flex-col gap-4 w-full">
-            {message.experimental_attachments && (
+            {messageWithStableId.experimental_attachments && (
               <div className="flex flex-row justify-end gap-2">
-                {message.experimental_attachments.map((attachment, index) => (
+                {messageWithStableId.experimental_attachments.map((attachment, index) => (
                   <PreviewAttachment 
                     key={`${attachment.url || ''}-${attachment.name || ''}-${index}`}
                     attachment={attachment} 
@@ -158,8 +185,8 @@ const PurePreviewMessage = ({
               </div>
             )}
 
-            {message.reasoning && (
-              <MessageReasoning isLoading={isLoading} reasoning={message.reasoning} />
+            {messageWithStableId.reasoning && (
+              <MessageReasoning isLoading={isLoading} reasoning={messageWithStableId.reasoning} />
             )}
 
             {/* Handle document creation tool invocation */}
@@ -172,9 +199,9 @@ const PurePreviewMessage = ({
             )}
 
             {/* Only show content if not a document creation message */}
-            {!documentToolInvocation && message.content && mode === "view" && (
+            {!documentToolInvocation && messageWithStableId.content && mode === "view" && (
               <div className="flex flex-row gap-2 items-start">
-                {message.role === "user" && !isReadonly && (
+                {messageWithStableId.role === "user" && !isReadonly && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -194,21 +221,21 @@ const PurePreviewMessage = ({
                 <div
                   className={cn("flex flex-col gap-4", {
                     "bg-primary text-primary-foreground dark:bg-zinc-800 dark:text-foreground px-3 py-2 rounded-[var(--radius-lg)]":
-                      message.role === "user"
+                      messageWithStableId.role === "user"
                   })}
                 >
-                  <Markdown>{message.content}</Markdown>
+                  <Markdown>{messageWithStableId.content}</Markdown>
                 </div>
               </div>
             )}
 
-            {message.content && mode === "edit" && (
+            {messageWithStableId.content && mode === "edit" && (
               <div className="flex flex-row gap-2 items-start">
                 <div className="size-8" />
 
                 <MessageEditor
-                  key={message.id}
-                  message={message}
+                  key={messageWithStableId.id}
+                  message={messageWithStableId}
                   setMode={setMode}
                   setMessages={setMessages}
                   reload={reload}
@@ -217,7 +244,7 @@ const PurePreviewMessage = ({
             )}
 
             {/* Handle other tool invocations */}
-            {(message.toolInvocations || [])
+            {(messageWithStableId.toolInvocations || [])
               .filter((t) => t.toolName !== "createDocument")
               .map((toolInvocation) => {
                 const { toolName, toolCallId, state, args } = toolInvocation;
@@ -275,9 +302,9 @@ const PurePreviewMessage = ({
 
             {!isReadonly && (
               <MessageActions
-                key={`action-${message.id}`}
+                key={`action-${messageWithStableId.id}`}
                 chatId={chatId}
-                message={message}
+                message={messageWithStableId}
                 vote={vote}
                 isLoading={isLoading}
               />
@@ -296,23 +323,13 @@ export const PreviewMessage = memo(PurePreviewMessage, (prevProps, nextProps) =>
   // Re-render if message content changes
   if (prevProps.message.content !== nextProps.message.content) return false;
   
-  // Re-render if message reasoning changes
-  if (prevProps.message.reasoning !== nextProps.message.reasoning) return false;
-  
-  // Re-render if tool invocations change, but only if they're different
-  if (prevProps.message.toolInvocations || nextProps.message.toolInvocations) {
-    if (!equal(prevProps.message.toolInvocations, nextProps.message.toolInvocations)) {
-      return false;
-    }
-  }
+  // Re-render if tool invocations change
+  if (!equal(prevProps.message.toolInvocations, nextProps.message.toolInvocations)) return false;
   
   // Re-render if vote changes
   if (!equal(prevProps.vote, nextProps.vote)) return false;
-  
-  // Re-render if readonly state changes
-  if (prevProps.isReadonly !== nextProps.isReadonly) return false;
 
-  // No relevant changes, prevent re-render
+  // Otherwise, prevent re-render
   return true;
 });
 

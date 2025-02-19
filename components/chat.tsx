@@ -89,24 +89,31 @@ export function Chat({
       }
       return { ...msg, chatId: id };
     }),
-    experimental_throttle: 100,
-    sendExtraMessageFields: true,
-    generateId: generateUUID,
-    onFinish: () => {
-      debug('message', 'Chat finished processing', {
+    onResponse: (response) => {
+      // This is called when the response starts streaming
+      debug('message', 'Response started streaming', {
         chatId: id,
-        finalMessageCount: messages.length + 1
+        status: response.status,
+        ok: response.ok
+      });
+    },
+    onFinish: () => {
+      debug('message', 'Chat finished', {
+        messageCount: messages.length,
+        lastMessage: messages[messages.length - 1],
+        hasToolInvocations: messages.some(m => m.toolInvocations?.length > 0),
+        toolInvocations: messages
+          .filter(m => m.toolInvocations?.length > 0)
+          .map(m => m.toolInvocations?.map(t => ({
+            state: t.state,
+            toolName: t.toolName
+          })))
       });
       mutate('/api/history');
     },
     onError: (error) => {
-      debug('message', 'Chat error occurred', {
-        chatId: id,
-        error: error.message
-      });
-      if (error.message && !error.message.includes('message channel closed')) {
-        toast.error('An error occurred, please try again!');
-      }
+      console.error('[Chat] Error occurred:', error);
+      toast.error('An error occurred, please try again!');
     },
   });
 
@@ -114,28 +121,15 @@ export function Chat({
 
   useEffect(() => {
     debug('message', 'Messages updated', {
-      chatId: id,
       messageCount: messages.length,
-      hasDocuments: messages.some(msg => {
-        try {
-          const content = JSON.parse(msg.content);
-          return content.type === 'document' || 
-                 (content.type === 'tool-call' && content.toolName === 'createDocument') ||
-                 (content.type === 'tool-result' && content.toolName === 'createDocument');
-        } catch {
-          return false;
-        }
-      }),
-      messageTypes: messages.map(msg => {
-        try {
-          const content = JSON.parse(msg.content);
-          return `${msg.role}:${content.type}`;
-        } catch {
-          return `${msg.role}:text`;
-        }
-      })
+      messages: messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        hasToolInvocations: !!m.toolInvocations?.length,
+        toolInvocationStates: m.toolInvocations?.map(t => t.state)
+      }))
     });
-  }, [messages, id]);
+  }, [messages]);
 
   const { data: votes } = useSWR<Array<Vote>>(
     `/api/vote?chatId=${id}`,

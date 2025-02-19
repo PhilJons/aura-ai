@@ -7,6 +7,7 @@ import type { DataStreamWriter } from 'ai';
 import type { Document } from '../db/schema';
 import { saveDocument } from '../db/queries';
 import type { Session } from 'next-auth';
+import { debug } from '@/lib/utils/debug';
 
 export interface SaveDocumentProps {
   id: string;
@@ -44,6 +45,13 @@ export function createDocumentHandler<T extends BlockKind>(config: {
   return {
     kind: config.kind,
     onCreateDocument: async (args: CreateDocumentCallbackProps) => {
+      debug('document', 'Saving document:', {
+        id: args.id,
+        title: args.title,
+        kind: config.kind,
+        userId: args.session?.user?.id
+      });
+
       const draftContent = await config.onCreateDocument({
         id: args.id,
         title: args.title,
@@ -52,18 +60,31 @@ export function createDocumentHandler<T extends BlockKind>(config: {
       });
 
       if (args.session?.user?.id) {
-        await saveDocument({
+        const savedDocument = await saveDocument({
           id: args.id,
           title: args.title,
           content: draftContent,
           kind: config.kind,
           userId: args.session.user.id,
         });
+
+        debug('document', 'Document saved successfully:', {
+          id: savedDocument.id,
+          title: savedDocument.title,
+          kind: savedDocument.kind
+        });
       }
 
       return;
     },
     onUpdateDocument: async (args: UpdateDocumentCallbackProps) => {
+      debug('document', 'Updating document:', {
+        id: args.document.id,
+        title: args.document.title,
+        kind: config.kind,
+        userId: args.session?.user?.id
+      });
+
       const draftContent = await config.onUpdateDocument({
         document: args.document,
         description: args.description,
@@ -72,12 +93,18 @@ export function createDocumentHandler<T extends BlockKind>(config: {
       });
 
       if (args.session?.user?.id) {
-        await saveDocument({
+        const savedDocument = await saveDocument({
           id: args.document.id,
           title: args.document.title,
           content: draftContent,
           kind: config.kind,
           userId: args.session.user.id,
+        });
+
+        debug('document', 'Document updated successfully:', {
+          id: savedDocument.id,
+          title: savedDocument.title,
+          kind: savedDocument.kind
         });
       }
 

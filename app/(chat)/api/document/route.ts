@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { getDocumentsById, saveDocument, deleteDocumentsByIdAfterTimestamp } from "@/lib/db/queries";
 import type { BlockKind } from "@/components/block";
 import { debug, debugError } from "@/lib/utils/debug";
-import { auth } from "@/app/auth";
+import { auth } from "@/app/(auth)/auth";
 
 export async function GET(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");

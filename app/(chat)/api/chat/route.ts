@@ -218,7 +218,8 @@ export async function POST(request: Request) {
                   reasoning,
                 });
 
-                await saveMessages({
+                // Save the messages
+                const savedMessages = await saveMessages({
                   messages: sanitizedResponseMessages.map((message) => {
                     return {
                       id: generateUUID(),
@@ -229,6 +230,14 @@ export async function POST(request: Request) {
                       type: 'message'
                     };
                   }),
+                });
+
+                // Send a special completion message that includes all saved messages
+                dataStream.writeData({
+                  type: 'completion',
+                  content: JSON.stringify({
+                    messages: savedMessages
+                  })
                 });
               } catch (error) {
                 console.error('Failed to save chat');
