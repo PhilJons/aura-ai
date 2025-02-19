@@ -167,6 +167,7 @@ const PurePreviewMessage = ({
               <DocumentPreview
                 isReadonly={isReadonly}
                 result={documentToolInvocation.result}
+                isCompact={block.isVisible}
               />
             )}
 

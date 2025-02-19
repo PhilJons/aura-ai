@@ -19,6 +19,9 @@ export const DEFAULT_CHAT_MODEL: string = 'chat-model-small';
 
 // Debug logging function with timestamp
 const debugLog = (message: string, data?: any) => {
+  // Only log in development
+  if (process.env.NODE_ENV !== 'development') return;
+  
   const timestamp = new Date().toISOString();
   const environment = typeof window === 'undefined' ? 'Server' : 'Client';
   console.log(`[${timestamp}] [${environment}] [Azure OpenAI Debug] ${message}`, data || '');

@@ -149,7 +149,7 @@ function PureBlock({
         setMetadata,
       });
     }
-  }, [block.documentId, blockDefinition, setMetadata, currentVersionIndex, document?.id, mode]);
+  }, [block.documentId, blockDefinition, setMetadata]);
 
   useEffect(() => {
     debug('block', 'Documents updated effect', {
@@ -197,7 +197,7 @@ function PureBlock({
       hasDocuments: !!documents
     });
     mutateDocuments();
-  }, [block.status, block.documentId, documents, isDocumentsFetching, mutateDocuments]);
+  }, [block.status, mutateDocuments]);
 
   const { mutate } = useSWRConfig();
   const [isContentDirty, setIsContentDirty] = useState(false);
@@ -206,59 +206,38 @@ function PureBlock({
     (updatedContent: string) => {
       if (!block) return;
 
-      debug('block', 'Content change triggered', {
-        documentId: block.documentId,
-        contentLength: updatedContent.length,
-        status: block.status,
-        isDirty: isContentDirty
-      });
-
       const key = `/api/document?id=${block.documentId}`;
       mutate(
         key,
         async (currentDocuments: Document[] | undefined) => {
-          if (!currentDocuments) {
-            debug('block', 'No current documents available', {
-              documentId: block.documentId
-            });
-            return currentDocuments;
-          }
+          if (!currentDocuments) return currentDocuments;
 
           const currentDocument = currentDocuments.at(-1);
 
           if (!currentDocument || !currentDocument.content) {
-            debug('block', 'No current document or content', {
-              hasDocument: !!currentDocument,
-              documentId: currentDocument?.id
-            });
             setIsContentDirty(false);
             return currentDocuments;
           }
 
+          // Only save if there's an actual change
           if (currentDocument.content !== updatedContent) {
-            debug('block', 'Saving updated content', {
-              documentId: block.documentId,
-              oldLength: currentDocument.content.length,
-              newLength: updatedContent.length,
-              title: block.title
-            });
-
             try {
-              await fetch(`/api/document?id=${block.documentId}`, {
+              const response = await fetch(`/api/document?id=${block.documentId}`, {
                 method: 'POST',
                 body: JSON.stringify({
                   title: block.title,
                   content: updatedContent,
                   kind: block.kind,
                 }),
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                }
               });
 
-              debug('block', 'Content saved successfully', {
-                documentId: block.documentId,
-                contentLength: updatedContent.length
-              });
-
-              setIsContentDirty(false);
+              if (!response.ok) {
+                throw new Error('Failed to save document');
+              }
 
               const updatedDocument: Document = {
                 ...currentDocument,
@@ -266,35 +245,46 @@ function PureBlock({
                 createdAt: new Date().toISOString(),
               };
 
-              return [updatedDocument, ...currentDocuments.slice(1)];
+              setIsContentDirty(false);
+              
+              // Append the new document instead of replacing
+              return [...currentDocuments, updatedDocument];
             } catch (error) {
-              debugError('block', 'Failed to save content', error);
+              setIsContentDirty(false);
               return currentDocuments;
             }
           }
+
+          setIsContentDirty(false);
           return currentDocuments;
         },
-        { revalidate: false }
+        { 
+          revalidate: false,
+          // Don't use populateCache to prevent UI glitches
+          populateCache: false
+        }
       );
     },
-    [block, mutate, isContentDirty],
+    [block, mutate],
   );
 
   const debouncedHandleContentChange = useDebounceCallback(
     handleContentChange,
-    2000,
+    500, // Reduced debounce time for more responsive saves
   );
 
   const saveContent = useCallback(
     (updatedContent: string, debounce: boolean) => {
-      if (document && updatedContent !== document.content) {
-        setIsContentDirty(true);
+      if (!document || updatedContent === document.content) {
+        return;
+      }
 
-        if (debounce) {
-          debouncedHandleContentChange(updatedContent);
-        } else {
-          handleContentChange(updatedContent);
-        }
+      setIsContentDirty(true);
+
+      if (debounce) {
+        debouncedHandleContentChange(updatedContent);
+      } else {
+        handleContentChange(updatedContent);
       }
     },
     [document, debouncedHandleContentChange, handleContentChange],

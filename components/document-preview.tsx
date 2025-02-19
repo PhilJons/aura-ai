@@ -21,20 +21,25 @@ import { useBlock } from '@/hooks/use-block';
 import { SpreadsheetEditor } from './sheet-editor';
 import { ImageEditor } from './image-editor';
 import { debug } from '@/lib/utils/debug';
+import { toast } from 'sonner';
+import equal from 'fast-deep-equal';
 
 interface DocumentPreviewProps {
   isReadonly: boolean;
   result?: any;
   args?: any;
+  isCompact?: boolean;
 }
 
 export function DocumentPreview({
   isReadonly,
   result,
   args,
+  isCompact = true, // Default to compact mode for chat messages
 }: DocumentPreviewProps) {
   const { block, setBlock } = useBlock();
-  const hitboxRef = useRef<HTMLDivElement>(null);
+  const compactButtonRef = useRef<HTMLButtonElement>(null);
+  const expandedDivRef = useRef<HTMLDivElement>(null);
   const previousDocumentId = useRef<string | null>(null);
 
   debug('document', 'Document preview initialization', {
@@ -85,7 +90,9 @@ export function DocumentPreview({
 
   // Memoize the bounding box update function
   const updateBoundingBox = useCallback(() => {
-    const boundingBox = hitboxRef.current?.getBoundingClientRect();
+    const boundingBox = isCompact 
+      ? compactButtonRef.current?.getBoundingClientRect()
+      : expandedDivRef.current?.getBoundingClientRect();
 
     if (block.documentId && boundingBox) {
       debug('document', 'Updating block bounding box', {
@@ -110,7 +117,7 @@ export function DocumentPreview({
         },
       }));
     }
-  }, [block.documentId, block.boundingBox, setBlock]);
+  }, [block.documentId, isCompact, setBlock]);
 
   useEffect(() => {
     updateBoundingBox();
@@ -186,7 +193,7 @@ export function DocumentPreview({
       documentId: result?.id,
       isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
     });
-    return <LoadingSkeleton blockKind={result?.kind ?? args?.kind} />;
+    return <LoadingSkeleton blockKind={result?.kind ?? args?.kind} isCompact={isCompact} />;
   }
 
   const document: Document | null = previewDocument
@@ -223,12 +230,62 @@ export function DocumentPreview({
       argsId: args?.id,
       isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
     });
-    return <LoadingSkeleton blockKind={block.kind} />;
+    return <LoadingSkeleton blockKind={block.kind} isCompact={isCompact} />;
+  }
+
+  if (isCompact) {
+    return (
+      <div className="relative w-full cursor-pointer">
+        <button
+          type="button"
+          className="bg-background cursor-pointer border py-2 px-3 rounded-xl w-fit flex flex-row gap-3 items-start"
+          onClick={(event) => {
+            if (isReadonly) {
+              toast.error(
+                'Viewing files in shared chats is currently not supported.',
+              );
+              return;
+            }
+
+            const rect = event.currentTarget.getBoundingClientRect();
+
+            const boundingBox = {
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height,
+            };
+
+            setBlock({
+              documentId: document.id,
+              kind: document.kind,
+              content: document.content || '',
+              title: document.title,
+              isVisible: true,
+              status: 'idle',
+              boundingBox,
+            });
+          }}
+          ref={compactButtonRef}
+        >
+          <div className="text-muted-foreground mt-1">
+            {document.kind === 'image' ? (
+              <ImageIcon />
+            ) : (
+              <FileIcon />
+            )}
+          </div>
+          <div className="text-left">
+            {document.title}
+          </div>
+        </button>
+      </div>
+    );
   }
 
   return (
-    <div className="relative w-full cursor-pointer">
-      <HitboxLayer hitboxRef={hitboxRef} result={result} setBlock={setBlock} />
+    <div className="relative w-full cursor-pointer" ref={expandedDivRef}>
+      <HitboxLayer hitboxRef={expandedDivRef} result={result} setBlock={setBlock} />
       <DocumentHeader
         title={document.title}
         kind={document.kind}
@@ -239,40 +296,57 @@ export function DocumentPreview({
   );
 }
 
-const LoadingSkeleton = ({ blockKind }: { blockKind: BlockKind }) => (
-  <div className="w-full">
-    <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-center justify-between dark:bg-muted h-[57px] dark:border-zinc-700 border-b-0">
-      <div className="flex flex-row items-center gap-3">
-        <div className="text-muted-foreground">
-          <div className="animate-pulse rounded-md size-4 bg-muted-foreground/20" />
+const LoadingSkeleton = ({ blockKind, isCompact = true }: { blockKind: BlockKind; isCompact?: boolean }) => {
+  if (isCompact) {
+    return (
+      <div className="w-fit">
+        <div className="border py-2 px-3 rounded-xl flex flex-row gap-3 items-center">
+          <div className="text-muted-foreground">
+            <div className="animate-pulse rounded-md size-4 bg-muted-foreground/20" />
+          </div>
+          <div className="animate-pulse rounded-lg h-4 bg-muted-foreground/20 w-24" />
         </div>
-        <div className="animate-pulse rounded-lg h-4 bg-muted-foreground/20 w-24" />
       </div>
-      <div>
-        <FullscreenIcon />
+    );
+  }
+
+  return (
+    <div className="w-full">
+      <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-center justify-between dark:bg-muted h-[57px] dark:border-zinc-700 border-b-0">
+        <div className="flex flex-row items-center gap-3">
+          <div className="text-muted-foreground">
+            <div className="animate-pulse rounded-md size-4 bg-muted-foreground/20" />
+          </div>
+          <div className="animate-pulse rounded-lg h-4 bg-muted-foreground/20 w-24" />
+        </div>
+        <div>
+          <FullscreenIcon />
+        </div>
       </div>
+      {blockKind === 'image' ? (
+        <div className="overflow-y-scroll border rounded-b-2xl bg-muted border-t-0 dark:border-zinc-700">
+          <div className="animate-pulse h-[257px] bg-muted-foreground/20 w-full" />
+        </div>
+      ) : (
+        <div className="overflow-y-scroll border rounded-b-2xl p-8 pt-4 bg-muted border-t-0 dark:border-zinc-700">
+          <InlineDocumentSkeleton />
+        </div>
+      )}
     </div>
-    {blockKind === 'image' ? (
-      <div className="overflow-y-scroll border rounded-b-2xl bg-muted border-t-0 dark:border-zinc-700">
-        <div className="animate-pulse h-[257px] bg-muted-foreground/20 w-full" />
-      </div>
-    ) : (
-      <div className="overflow-y-scroll border rounded-b-2xl p-8 pt-4 bg-muted border-t-0 dark:border-zinc-700">
-        <InlineDocumentSkeleton />
-      </div>
-    )}
-  </div>
-);
+  );
+};
+
+interface HitboxLayerProps {
+  hitboxRef: React.RefObject<HTMLElement>;
+  result: any;
+  setBlock: (updaterFn: UIBlock | ((currentBlock: UIBlock) => UIBlock)) => void;
+}
 
 const PureHitboxLayer = ({
   hitboxRef,
   result,
   setBlock,
-}: {
-  hitboxRef: React.RefObject<HTMLDivElement>;
-  result: any;
-  setBlock: (updaterFn: UIBlock | ((currentBlock: UIBlock) => UIBlock)) => void;
-}) => {
+}: HitboxLayerProps) => {
   const handleClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       const boundingBox = event.currentTarget.getBoundingClientRect();
@@ -301,7 +375,7 @@ const PureHitboxLayer = ({
   return (
     <div
       className="size-full absolute top-0 left-0 rounded-xl z-10"
-      ref={hitboxRef}
+      ref={hitboxRef as React.RefObject<HTMLDivElement>}
       onClick={handleClick}
       role="presentation"
       aria-hidden="true"
@@ -316,10 +390,7 @@ const PureHitboxLayer = ({
 };
 
 const HitboxLayer = memo(PureHitboxLayer, (prevProps, nextProps) => {
-  // Only re-render if result changes in a meaningful way
-  if (prevProps.result?.id !== nextProps.result?.id) return false;
-  if (prevProps.result?.title !== nextProps.result?.title) return false;
-  if (prevProps.result?.kind !== nextProps.result?.kind) return false;
+  if (!equal(prevProps.result, nextProps.result)) return false;
   return true;
 });
 
