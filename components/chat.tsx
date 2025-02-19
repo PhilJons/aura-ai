@@ -109,7 +109,41 @@ export function Chat({
             toolName: t.toolName
           })))
       });
+
+      // First mutate history to ensure sidebar is updated
       mutate('/api/history');
+      
+      // Then refresh messages with proper error handling and retries
+      const refreshMessages = async () => {
+        try {
+          const response = await fetch(`/api/chat/message?chatId=${id}`);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch messages: ${response.status}`);
+          }
+          const updatedMessages = await response.json();
+          
+          if (updatedMessages && Array.isArray(updatedMessages)) {
+            setMessages(updatedMessages.map(msg => ({ ...msg, chatId: id })));
+          }
+        } catch (error) {
+          console.error('Error refreshing messages:', error);
+          // Retry once after a short delay
+          setTimeout(async () => {
+            try {
+              const retryResponse = await fetch(`/api/chat/message?chatId=${id}`);
+              const retryMessages = await retryResponse.json();
+              if (retryMessages && Array.isArray(retryMessages)) {
+                setMessages(retryMessages.map(msg => ({ ...msg, chatId: id })));
+              }
+            } catch (retryError) {
+              console.error('Error retrying message refresh:', retryError);
+              toast.error('Failed to sync messages');
+            }
+          }, 1000);
+        }
+      };
+
+      refreshMessages();
     },
     onError: (error) => {
       console.error('[Chat] Error occurred:', error);

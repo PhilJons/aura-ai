@@ -22,6 +22,46 @@ import { debug } from "@/lib/utils/debug";
 import { useBlock } from "@/hooks/use-block";
 import type { UIBlock } from "./block";
 
+function extractTextFromContent(content: any): string {
+  // If content is a string, try to parse it as JSON first
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content);
+      return extractTextFromContent(parsed);
+    } catch {
+      return content;
+    }
+  }
+
+  // Handle array content
+  if (Array.isArray(content)) {
+    return content.map(item => extractTextFromContent(item)).join('\n');
+  }
+
+  // Handle object content
+  if (typeof content === 'object' && content !== null) {
+    // If this is a document object or has a document type, return empty string
+    if (content.type === 'document' || content.kind === 'document') {
+      return '';
+    }
+    // If content has a text property, use that
+    if ('text' in content) {
+      return content.text;
+    }
+    // If content has a content property, extract from that
+    if ('content' in content) {
+      return extractTextFromContent(content.content);
+    }
+    // If content has a result property, extract from that
+    if ('result' in content) {
+      return extractTextFromContent(content.result);
+    }
+  }
+
+  // Fallback to string conversion
+  return String(content || '');
+}
+
 const PurePreviewMessage = ({
   chatId,
   message,
@@ -65,7 +105,7 @@ const PurePreviewMessage = ({
   }, [messageWithStableId.toolInvocations]);
 
   useEffect(() => {
-    if (documentToolInvocation && !isDocumentInitialized) {
+    if (documentToolInvocation) {
       debug("message", "Initializing document state", {
         messageId: messageWithStableId.id,
         toolCallId: documentToolInvocation.toolCallId,
@@ -76,36 +116,37 @@ const PurePreviewMessage = ({
 
       // Use a function to update block state to ensure we have latest values
       setBlock((currentBlock: UIBlock) => {
-        // Only update if this is a new document or we haven't initialized yet
-        if (currentBlock.documentId === "init" || currentBlock.documentId !== documentToolInvocation.result.id) {
-          debug("message", "Updating block state with document", {
-            fromBlockId: currentBlock.documentId,
-            toDocumentId: documentToolInvocation.result.id,
-            isNewDocument: currentBlock.documentId === "init",
-            hasContentChange: currentBlock.content !== (documentToolInvocation.result.content || "")
-          });
+        // Always update on document tool invocation to ensure proper initialization
+        debug("message", "Updating block state with document", {
+          fromBlockId: currentBlock.documentId,
+          toDocumentId: documentToolInvocation.result.id,
+          isNewDocument: currentBlock.documentId === "init",
+          hasContentChange: currentBlock.content !== (documentToolInvocation.result.content || "")
+        });
 
-          return {
-            ...currentBlock,
-            documentId: documentToolInvocation.result.id,
-            title: documentToolInvocation.result.title,
-            kind: documentToolInvocation.result.kind,
-            status: "idle",
-            isVisible: true, // Make document visible immediately
-            content: documentToolInvocation.result.content || "",
-            boundingBox: {
-              top: 0,
-              left: 0,
-              width: 0,
-              height: 0
-            }
-          };
+        const updatedBlock = {
+          ...currentBlock,
+          documentId: documentToolInvocation.result.id,
+          title: documentToolInvocation.result.title,
+          kind: documentToolInvocation.result.kind,
+          status: "idle",
+          isVisible: true,
+          content: documentToolInvocation.result.content || "",
+          boundingBox: {
+            top: 0,
+            left: 0,
+            width: 0,
+            height: 0
+          }
+        };
+
+        // Only mark as initialized after successful update
+        if (!isDocumentInitialized) {
+          setTimeout(() => setIsDocumentInitialized(true), 0);
         }
-        return currentBlock;
-      });
 
-      // Mark as initialized only after state is updated
-      setIsDocumentInitialized(true);
+        return updatedBlock;
+      });
     }
   }, [documentToolInvocation, messageWithStableId.id, setBlock, block.documentId, isDocumentInitialized]);
 
@@ -113,7 +154,7 @@ const PurePreviewMessage = ({
     debug('message', 'Message rendered', {
       messageId: messageWithStableId.id,
       role: messageWithStableId.role,
-      content: messageWithStableId.content?.substring(0, 100) + '...',
+      content: typeof messageWithStableId.content === 'string' ? messageWithStableId.content?.substring(0, 100) + '...' : JSON.stringify(messageWithStableId.content)?.substring(0, 100) + '...',
       hasToolInvocations: !!messageWithStableId.toolInvocations?.length,
       toolInvocations: messageWithStableId.toolInvocations?.map(t => ({
         state: t.state,
@@ -224,7 +265,29 @@ const PurePreviewMessage = ({
                       messageWithStableId.role === "user"
                   })}
                 >
-                  <Markdown>{messageWithStableId.content}</Markdown>
+                  <Markdown>
+                    {(() => {
+                      const content = messageWithStableId.content;
+                      
+                      // If content is already a string, try to parse it as JSON
+                      if (typeof content === 'string') {
+                        try {
+                          const parsed = JSON.parse(content);
+                          return extractTextFromContent(parsed);
+                        } catch {
+                          return content;
+                        }
+                      }
+                      
+                      // If content is an object, try to extract text directly
+                      if (typeof content === 'object' && content !== null) {
+                        return extractTextFromContent(content);
+                      }
+                      
+                      // Fallback to string conversion
+                      return String(content || '');
+                    })()}
+                  </Markdown>
                 </div>
               </div>
             )}
