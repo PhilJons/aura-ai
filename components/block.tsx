@@ -56,4 +56,7 @@ function PureBlock() {
   return null;
 }
 
+PureBlock.displayName = 'PureBlock';
+
 export const Block = memo(() => null, () => true);
+Block.displayName = 'Block';

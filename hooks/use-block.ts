@@ -38,13 +38,27 @@ export function useBlockSelector<Selected>(selector: Selector<Selected>) {
 }
 
 export function useBlock() {
+  const { data: block, mutate } = useSWR<UIBlock>('block', null, {
+    fallbackData: initialBlockData,
+    revalidateOnFocus: false,
+    revalidateIfStale: false
+  });
+
+  const setBlock = useCallback(
+    (updater: UIBlock | ((currentBlock: UIBlock) => UIBlock)) => {
+      const newBlock = typeof updater === 'function' ? updater(block || initialBlockData) : updater;
+      return mutate(newBlock);
+    },
+    [block, mutate]
+  );
+
   return useMemo(
     () => ({
-      block: { ...initialBlockData, isVisible: false },
-      setBlock: () => {},
+      block: block || initialBlockData,
+      setBlock,
       metadata: null,
       setMetadata: () => {},
     }),
-    []
+    [block, setBlock]
   );
 }

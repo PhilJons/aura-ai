@@ -86,3 +86,12 @@ print(f"Factorial of 5 is: {factorial(5)}")
 export const sheetPrompt = `
 You are a spreadsheet creation assistant. Create a spreadsheet in csv format based on the given prompt. The spreadsheet should contain meaningful column headers and data.
 `;
+
+export const updateDocumentPrompt = (content: string, type: string) => {
+  return `You are a code generator. You will update the following ${type} content based on the description provided:
+
+${content}
+
+Please provide an updated version that incorporates the requested changes while maintaining the existing structure and functionality.
+The response should be well-documented and follow best practices.`;
+};

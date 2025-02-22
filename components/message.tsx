@@ -20,7 +20,38 @@ import { DocumentPreview } from "./document-preview";
 import { MessageReasoning } from "./message-reasoning";
 import { debug } from "@/lib/utils/debug";
 import { useBlock } from "@/hooks/use-block";
-import type { UIBlock } from "./block";
+import type { UIBlock, BlockKind } from "./block";
+
+interface DocumentToolResult {
+  id: string;
+  title: string;
+  kind: BlockKind;
+  content?: string;
+}
+
+interface DocumentToolInvocation {
+  toolName: string;
+  toolCallId: string;
+  state: "result";
+  result: DocumentToolResult;
+}
+
+interface ToolInvocationBase {
+  toolName: string;
+  toolCallId: string;
+  args: any;
+}
+
+interface ToolInvocationCall extends ToolInvocationBase {
+  state: 'call';
+}
+
+interface ToolInvocationResult extends ToolInvocationBase {
+  state: 'result';
+  result: DocumentToolResult;
+}
+
+type ToolInvocation = ToolInvocationCall | ToolInvocationResult;
 
 function extractTextFromContent(content: any): string {
   // If content is a string, try to parse it as JSON first
@@ -91,25 +122,32 @@ const PurePreviewMessage = ({
   // Use the original message ID for tool invocations to maintain stability
   const messageWithStableId = useMemo(() => ({
     ...message,
-    id: originalMessageId.current
-  }), [message]);
+    id: originalMessageId.current,
+    chatId
+  }), [message, chatId]);
 
   // Memoize the document tool invocation to prevent unnecessary recalculations
   const documentToolInvocation = useMemo(() => {
     const toolInvocations = messageWithStableId.toolInvocations || [];
     return toolInvocations.find(
       (t) => t.toolName === "createDocument" && t.state === "result"
-    ) as
-      | (typeof toolInvocations[0] & { state: "result"; result: any })
-      | undefined;
+    ) as ToolInvocationResult | undefined;
   }, [messageWithStableId.toolInvocations]);
 
+  // Only show document preview if we have a valid result
+  const documentPreviewResult = useMemo(() => {
+    if (!documentToolInvocation || documentToolInvocation.state !== "result") {
+      return undefined;
+    }
+    return documentToolInvocation.result;
+  }, [documentToolInvocation]);
+
   useEffect(() => {
-    if (documentToolInvocation) {
+    if (documentToolInvocation && documentPreviewResult) {
       debug("message", "Initializing document state", {
         messageId: messageWithStableId.id,
         toolCallId: documentToolInvocation.toolCallId,
-        documentId: documentToolInvocation.result.id,
+        documentId: documentPreviewResult.id,
         currentBlockId: block.documentId,
         isFirstInitialization: !isDocumentInitialized
       });
@@ -119,19 +157,19 @@ const PurePreviewMessage = ({
         // Always update on document tool invocation to ensure proper initialization
         debug("message", "Updating block state with document", {
           fromBlockId: currentBlock.documentId,
-          toDocumentId: documentToolInvocation.result.id,
+          toDocumentId: documentPreviewResult.id,
           isNewDocument: currentBlock.documentId === "init",
-          hasContentChange: currentBlock.content !== (documentToolInvocation.result.content || "")
+          hasContentChange: currentBlock.content !== (documentPreviewResult.content || "")
         });
 
         const updatedBlock = {
           ...currentBlock,
-          documentId: documentToolInvocation.result.id,
-          title: documentToolInvocation.result.title,
-          kind: documentToolInvocation.result.kind,
-          status: "idle",
+          documentId: documentPreviewResult.id,
+          title: documentPreviewResult.title,
+          kind: documentPreviewResult.kind,
+          status: "idle" as const,
           isVisible: true,
-          content: documentToolInvocation.result.content || "",
+          content: documentPreviewResult.content || "",
           boundingBox: {
             top: 0,
             left: 0,
@@ -148,7 +186,7 @@ const PurePreviewMessage = ({
         return updatedBlock;
       });
     }
-  }, [documentToolInvocation, messageWithStableId.id, setBlock, block.documentId, isDocumentInitialized]);
+  }, [documentToolInvocation, documentPreviewResult, messageWithStableId.id, setBlock, block.documentId, isDocumentInitialized]);
 
   useEffect(() => {
     debug('message', 'Message rendered', {
@@ -208,10 +246,10 @@ const PurePreviewMessage = ({
             )}
 
             {/* Handle document creation tool invocation */}
-            {documentToolInvocation && (
+            {documentToolInvocation && documentPreviewResult && (
               <DocumentPreview
                 isReadonly={isReadonly}
-                result={documentToolInvocation.result}
+                result={documentPreviewResult}
                 isCompact={block.isVisible}
               />
             )}

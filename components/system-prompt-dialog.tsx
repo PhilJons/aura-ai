@@ -234,7 +234,7 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
       
       const parsedFiles = systemMessages
         .map(parseSystemMessage)
-        .filter((file): file is DocumentFile => file !== null);
+        .filter((file: DocumentFile | null): file is DocumentFile => file !== null);
       console.log('Parsed files:', parsedFiles);
       
       setFiles(parsedFiles);
