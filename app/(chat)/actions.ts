@@ -86,3 +86,46 @@ export async function clearChatCookies() {
   cookieStore.delete('chat-model');
   // Add any other chat-related cookies that need to be cleared
 }
+
+export async function updateMessage({
+  id,
+  content,
+}: {
+  id: string;
+  content: string;
+}) {
+  try {
+    // Query for the message with both id and type
+    const querySpec = {
+      query: 'SELECT * FROM c WHERE c.id = @id AND c.type = "message"',
+      parameters: [{ name: '@id', value: id }]
+    };
+    
+    const { resources } = await containers.messages.items.query(querySpec).fetchAll();
+    const message = resources[0];
+    
+    if (!message) {
+      throw new Error(`Message not found with id: ${id}`);
+    }
+
+    // Update the message
+    const { resource: updatedMessage } = await containers.messages
+      .item(message.id, message.id)
+      .replace({
+        ...message,
+        content,
+        updatedAt: new Date().toISOString()
+      });
+
+    // Delete messages after this one
+    await deleteMessagesByChatIdAfterTimestamp({
+      chatId: message.chatId,
+      timestamp: new Date(message.createdAt),
+    });
+
+    return updatedMessage;
+  } catch (error) {
+    console.error('Error in updateMessage:', error);
+    throw error;
+  }
+}

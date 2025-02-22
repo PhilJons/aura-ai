@@ -36,13 +36,6 @@ export function Chat({
     chatId: id,
     isNewChat: initialMessages.length === 0,
     initialMessageCount: initialMessages.length,
-    hasDocuments: initialMessages.some(msg => 
-      msg.content.includes('"kind":') && 
-      (msg.content.includes('"text"') || 
-       msg.content.includes('"code"') || 
-       msg.content.includes('"image"') || 
-       msg.content.includes('"sheet"'))
-    ),
     isPageReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
   });
 
@@ -77,8 +70,7 @@ export function Chat({
           contentType: parsedContent.type,
           hasToolCall: parsedContent.type === 'tool-call',
           hasToolResult: parsedContent.type === 'tool-result',
-          toolName: parsedContent.toolName,
-          documentId: parsedContent.type === 'document' ? parsedContent.result?.id : undefined
+          toolName: parsedContent.toolName
         });
       } catch (error) {
         debug('message', 'Initial message is plain text', {
@@ -101,13 +93,12 @@ export function Chat({
       debug('message', 'Chat finished', {
         messageCount: messages.length,
         lastMessage: messages[messages.length - 1],
-        hasToolInvocations: messages.some(m => m.toolInvocations?.length > 0),
         toolInvocations: messages
-          .filter(m => m.toolInvocations?.length > 0)
-          .map(m => m.toolInvocations?.map(t => ({
+          .flatMap(m => m.toolInvocations || [])
+          .map(t => ({
             state: t.state,
             toolName: t.toolName
-          })))
+          }))
       });
 
       // First mutate history to ensure sidebar is updated
@@ -171,66 +162,45 @@ export function Chat({
   );
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
-  const isBlockVisible = useBlockSelector((state) => state.isVisible);
 
   return (
-    <>
-      <div className="flex flex-col min-w-0 h-dvh bg-background">
-        <ChatHeader
-          chatId={id}
-          selectedModelId={selectedChatModel}
-          selectedVisibilityType={selectedVisibilityType}
-          isReadonly={isReadonly}
-        />
-
-        <Messages
-          chatId={id}
-          isLoading={isLoading}
-          votes={votes}
-          messages={messagesWithChatId}
-          setMessages={setMessages}
-          reload={reload}
-          isReadonly={isReadonly}
-          isBlockVisible={isBlockVisible}
-        />
-
-        <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
-          {!isReadonly && (
-            <MultimodalInput
-              chatId={id}
-              input={input}
-              setInput={setInput}
-              handleSubmit={handleSubmit}
-              isLoading={isLoading}
-              stop={stop}
-              attachments={attachments}
-              setAttachments={setAttachments}
-              messages={messagesWithChatId}
-              setMessages={setMessages}
-              append={append}
-              selectedChatModel={selectedChatModel}
-            />
-          )}
-        </form>
-      </div>
-
-      <Block
+    <div className="flex flex-col min-w-0 h-dvh bg-background">
+      <ChatHeader
         chatId={id}
-        input={input}
-        setInput={setInput}
-        handleSubmit={handleSubmit}
+        selectedModelId={selectedChatModel}
+        selectedVisibilityType={selectedVisibilityType}
+        isReadonly={isReadonly}
+      />
+
+      <Messages
+        chatId={id}
         isLoading={isLoading}
-        stop={stop}
-        attachments={attachments}
-        setAttachments={setAttachments}
-        append={append}
-        messages={messagesWithChatId}
+        votes={votes}
+        messages={messages}
         setMessages={setMessages}
         reload={reload}
-        votes={votes}
         isReadonly={isReadonly}
-        selectedChatModel={selectedChatModel}
+        isBlockVisible={false}
       />
-    </>
+
+      <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
+        {!isReadonly && (
+          <MultimodalInput
+            chatId={id}
+            input={input}
+            setInput={setInput}
+            handleSubmit={handleSubmit}
+            isLoading={isLoading}
+            stop={stop}
+            attachments={attachments}
+            setAttachments={setAttachments}
+            messages={messages}
+            setMessages={setMessages}
+            append={append}
+            selectedChatModel={selectedChatModel}
+          />
+        )}
+      </form>
+    </div>
   );
 }

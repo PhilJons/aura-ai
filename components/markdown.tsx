@@ -1,39 +1,51 @@
+'use client';
+
 import Link from 'next/link';
-import { memo, Children, isValidElement } from 'react';
+import React, { memo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './code-block';
 
 const components: Partial<Components> = {
   // @ts-expect-error
-  code: CodeBlock,
-  pre: ({ node, children }) => {
-    // Check if this pre block contains a code block
-    const codeChild = Children.toArray(children).find(child =>
-      isValidElement(child) && child.type === CodeBlock
+  code: ({ node, inline, className, children, ...props }) => {
+    const content = String(children).replace(/\n$/, '');
+    const codeClassName = className || '';
+    
+    return (
+      <CodeBlock
+        node={node}
+        inline={!!inline}
+        className={codeClassName}
+        {...props}
+      >
+        {content}
+      </CodeBlock>
     );
-    
-    if (codeChild) {
-      // If it contains a code block, just return it directly
-      return codeChild;
-    }
-    
-    // Otherwise wrap in a pre tag
-    return <pre>{children}</pre>;
   },
-  p: ({ node, children }) => {
-    // Check if the paragraph contains a code block
-    const hasCodeBlock = Children.toArray(children).some(child =>
-      isValidElement(child) && 
-      (child.type === CodeBlock || (child.props?.node && child.props.node.type === 'code'))
-    );
-
-    // If it contains a code block, render children without p wrapper
-    if (hasCodeBlock) {
-      return <>{children}</>;
+  // Handle paragraphs to prevent invalid nesting
+  p: ({ children }) => {
+    // Check if children contains only a code block
+    const childrenArray = React.Children.toArray(children);
+    if (childrenArray.length === 1 && React.isValidElement(childrenArray[0])) {
+      const child = childrenArray[0];
+      if (child.type === CodeBlock || (child.props && child.props.node?.tagName === 'code')) {
+        return <>{children}</>;
+      }
     }
-
-    return <p>{children}</p>;
+    return <p className="mb-4">{children}</p>;
+  },
+  // Handle pre tags
+  pre: ({ children }) => {
+    // Check if children is a CodeBlock
+    const childrenArray = React.Children.toArray(children);
+    if (childrenArray.length === 1 && React.isValidElement(childrenArray[0])) {
+      const child = childrenArray[0];
+      if (child.type === CodeBlock || (child.props && child.props.node?.tagName === 'code')) {
+        return children;
+      }
+    }
+    return <div className="my-4">{children}</div>;
   },
   ol: ({ node, children, ...props }) => {
     return (
@@ -42,95 +54,49 @@ const components: Partial<Components> = {
       </ol>
     );
   },
-  li: ({ node, children, ...props }) => {
-    return (
-      <li className="py-1" {...props}>
-        {children}
-      </li>
-    );
-  },
   ul: ({ node, children, ...props }) => {
     return (
-      <ul className="list-decimal list-outside ml-4" {...props}>
+      <ul className="list-disc list-outside ml-4" {...props}>
         {children}
       </ul>
     );
   },
-  strong: ({ node, children, ...props }) => {
+  a: ({ node, children, href, ...props }) => {
+    if (href?.startsWith('/')) {
+      return (
+        <Link href={href} {...props}>
+          {children}
+        </Link>
+      );
+    }
+
     return (
-      <span className="font-semibold" {...props}>
-        {children}
-      </span>
-    );
-  },
-  a: ({ node, children, ...props }) => {
-    return (
-      // @ts-expect-error
-      <Link
-        className="text-blue-500 hover:underline"
+      <a
+        href={href}
         target="_blank"
-        rel="noreferrer"
+        rel="noopener noreferrer"
+        className="text-blue-500 hover:underline"
         {...props}
       >
         {children}
-      </Link>
+      </a>
     );
   },
-  h1: ({ node, children, ...props }) => {
-    return (
-      <h1 className="text-3xl font-semibold mt-6 mb-2" {...props}>
-        {children}
-      </h1>
-    );
-  },
-  h2: ({ node, children, ...props }) => {
-    return (
-      <h2 className="text-2xl font-semibold mt-6 mb-2" {...props}>
-        {children}
-      </h2>
-    );
-  },
-  h3: ({ node, children, ...props }) => {
-    return (
-      <h3 className="text-xl font-semibold mt-6 mb-2" {...props}>
-        {children}
-      </h3>
-    );
-  },
-  h4: ({ node, children, ...props }) => {
-    return (
-      <h4 className="text-lg font-semibold mt-6 mb-2" {...props}>
-        {children}
-      </h4>
-    );
-  },
-  h5: ({ node, children, ...props }) => {
-    return (
-      <h5 className="text-base font-semibold mt-6 mb-2" {...props}>
-        {children}
-      </h5>
-    );
-  },
-  h6: ({ node, children, ...props }) => {
-    return (
-      <h6 className="text-sm font-semibold mt-6 mb-2" {...props}>
-        {children}
-      </h6>
-    );
-  },
-};
-
-const remarkPlugins = [remarkGfm];
-
-const NonMemoizedMarkdown = ({ children }: { children: string }) => {
-  return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
-      {children}
-    </ReactMarkdown>
-  );
 };
 
 export const Markdown = memo(
-  NonMemoizedMarkdown,
+  ({ children }: { children: string }) => {
+    return (
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={components}
+        className="prose dark:prose-invert max-w-none"
+      >
+        {children}
+      </ReactMarkdown>
+    );
+  },
   (prevProps, nextProps) => prevProps.children === nextProps.children,
 );
+
+Markdown.displayName = 'Markdown';

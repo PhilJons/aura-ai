@@ -19,6 +19,16 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
       kind: z.enum(blockKinds),
     }),
     execute: async ({ title, kind }) => {
+      // Feature temporarily disabled
+      return {
+        id: 'disabled',
+        title: 'Feature Disabled',
+        kind: kind,
+        content: 'The Canvas Document Blocks feature is temporarily disabled.',
+      };
+      
+      // Original implementation commented out
+      /*
       const id = generateUUID();
       
       debug('document', 'Creating document:', {
@@ -80,5 +90,6 @@ export const createDocument = ({ session, dataStream }: CreateDocumentProps) =>
         kind,
         content: 'A document was created and is now visible to the user.',
       };
+      */
     },
   });

@@ -117,10 +117,7 @@ export function createDocumentHandler<T extends BlockKind>(config: {
  * Use this array to define the document handlers for each block kind.
  */
 export const documentHandlersByBlockKind: Array<DocumentHandler> = [
-  textDocumentHandler,
-  codeDocumentHandler,
-  imageDocumentHandler,
-  sheetDocumentHandler,
+  // Temporarily disabled all document handlers
 ];
 
 export const blockKinds = ['text', 'code', 'image', 'sheet'] as const;
