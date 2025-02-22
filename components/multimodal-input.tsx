@@ -326,7 +326,6 @@ function PureMultimodalInput({
         multiple
         onChange={handleFileChange}
         tabIndex={-1}
-        disabled={selectedChatModel === "chat-model-small"}
       />
 
       {(attachments.length > 0 || uploadQueue.length > 0) && (

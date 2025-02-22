@@ -171,21 +171,9 @@ const PurePreviewMessage = ({
     return null;
   }
 
-  // If this is a document message but we're still loading the document content,
-  // show a loading state instead of the placeholder text
-  if (documentToolInvocation && !isDocumentInitialized) {
-    return (
-      <motion.div 
-        className="w-full mx-auto max-w-3xl px-4"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
-        <div className="flex gap-4 items-center">
-          <div className="size-8 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border bg-background animate-pulse" />
-          <div className="h-[57px] w-full bg-muted rounded-xl animate-pulse" />
-        </div>
-      </motion.div>
-    );
+  // Skip rendering if this is a document creation message
+  if (documentToolInvocation) {
+    return null;
   }
 
   return (
@@ -215,17 +203,6 @@ const PurePreviewMessage = ({
           )}
 
           <div className="flex flex-col gap-4 w-full">
-            {messageWithStableId.experimental_attachments && (
-              <div className="flex flex-row justify-end gap-2">
-                {messageWithStableId.experimental_attachments.map((attachment, index) => (
-                  <PreviewAttachment 
-                    key={`${attachment.url || ''}-${attachment.name || ''}-${index}`}
-                    attachment={attachment} 
-                  />
-                ))}
-              </div>
-            )}
-
             {messageWithStableId.reasoning && (
               <MessageReasoning isLoading={isLoading} reasoning={messageWithStableId.reasoning} />
             )}
@@ -260,34 +237,36 @@ const PurePreviewMessage = ({
                 )}
 
                 <div
-                  className={cn("flex flex-col gap-4", {
-                    "bg-primary text-primary-foreground dark:bg-primary dark:text-primary-foreground px-3 py-2 rounded-[var(--radius-lg)] [&_*]:!text-primary-foreground dark:[&_*]:!text-primary-foreground":
+                  className={cn("flex flex-col gap-0", {
+                    "bg-primary text-primary-foreground dark:bg-primary dark:text-primary-foreground px-4 py-2.5 rounded-[var(--radius-lg)] [&_*]:!text-primary-foreground dark:[&_*]:!text-primary-foreground":
                       messageWithStableId.role === "user"
                   })}
                 >
-                  <Markdown className="[&_*]:!text-inherit">
-                    {(() => {
-                      const content = messageWithStableId.content;
-                      
-                      // If content is already a string, try to parse it as JSON
-                      if (typeof content === 'string') {
-                        try {
-                          const parsed = JSON.parse(content);
-                          return extractTextFromContent(parsed);
-                        } catch {
-                          return content;
+                  <div className="!mb-0">
+                    <Markdown className="[&_*]:!text-inherit [&_p]:!m-0 [&>*:last-child]:!mb-0 [&>*:first-child]:!mt-0 [&_p]:!mb-0">
+                      {(() => {
+                        const content = messageWithStableId.content;
+                        
+                        // If content is already a string, try to parse it as JSON
+                        if (typeof content === 'string') {
+                          try {
+                            const parsed = JSON.parse(content);
+                            return extractTextFromContent(parsed);
+                          } catch {
+                            return content;
+                          }
                         }
-                      }
-                      
-                      // If content is an object, try to extract text directly
-                      if (typeof content === 'object' && content !== null) {
-                        return extractTextFromContent(content);
-                      }
-                      
-                      // Fallback to string conversion
-                      return String(content || '');
-                    })()}
-                  </Markdown>
+                        
+                        // If content is an object, try to extract text directly
+                        if (typeof content === 'object' && content !== null) {
+                          return extractTextFromContent(content);
+                        }
+                        
+                        // Fallback to string conversion
+                        return String(content || '');
+                      })()}
+                    </Markdown>
+                  </div>
                 </div>
               </div>
             )}

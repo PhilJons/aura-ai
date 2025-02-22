@@ -384,27 +384,29 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-9 w-9 relative" 
-          aria-label="View Document Context"
-        >
-          <Info className="h-4 w-4" />
-          {files.length > 0 && (
-            <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium flex items-center justify-center text-primary-foreground">
-              {files.length}
-            </div>
-          )}
-          {isInitialPolling && (
-            <div className="absolute inset-0 rounded-md bg-background/80 flex items-center justify-center">
-              <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-          <span className="sr-only">View Document Context</span>
-        </Button>
-      </DialogTrigger>
+      {(files.length > 0 || isInitialPolling) && (
+        <DialogTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-9 w-9 relative" 
+            aria-label="View Document Context"
+          >
+            <Info className="h-4 w-4" />
+            {files.length > 0 && (
+              <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium flex items-center justify-center text-primary-foreground">
+                {files.length}
+              </div>
+            )}
+            {isInitialPolling && (
+              <div className="absolute inset-0 rounded-md bg-background/80 flex items-center justify-center">
+                <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            <span className="sr-only">View Document Context</span>
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Document Context</DialogTitle>

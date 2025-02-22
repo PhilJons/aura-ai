@@ -36,12 +36,12 @@ export function ClearChat({ chatId, isReadonly }: ClearChatProps) {
         throw new Error('Failed to delete chat');
       }
 
+      setIsOpen(false);
       router.push('/');
       router.refresh();
     } catch (error) {
       console.error('Error deleting chat:', error);
       toast.error('Failed to delete chat');
-    } finally {
       setIsDeleting(false);
       setIsOpen(false);
     }
