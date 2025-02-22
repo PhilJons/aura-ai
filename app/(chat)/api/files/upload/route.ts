@@ -167,11 +167,24 @@ export async function POST(request: Request) {
       },
     ];
 
-    // 2) If it's a PDF, call processDocument -> store as JSON
-    if (rawMimeType === "application/pdf") {
-      logger.upload.info("Detected PDF, processing with Azure Document Intelligence");
+    // Process PDFs and text files
+    if (rawMimeType === "application/pdf" || rawMimeType === "text/plain") {
+      logger.upload.info(`Processing ${rawMimeType} file`, { filename: originalFilename });
       try {
-        const processed = await processDocument(buf, rawMimeType, originalFilename);
+        let processed;
+        if (rawMimeType === "text/plain") {
+          // For text files, simply read the content
+          processed = {
+            text: buf.toString('utf-8'),
+            pages: 1,
+            fileType: 'text/plain',
+            language: 'Not specified',
+            images: []
+          };
+        } else {
+          // For PDFs, use Azure Document Intelligence
+          processed = await processDocument(buf, rawMimeType, originalFilename);
+        }
 
         // Convert extracted result to JSON
         const jsonFilename = `${uuidv4()}.json`;
@@ -196,23 +209,23 @@ export async function POST(request: Request) {
           "application/json"
         );
 
-        // Add second item to attachments with proper linking to PDF
+        // Add second item to attachments with proper linking to original file
         attachments.push({
           url: jsonUploadData.url,
           name: jsonFilename,
           contentType: "application/json",
           isAzureExtractedJson: true,
           originalName: originalFilename,
-          pdfUrl: rawUploadData.url
+          pdfUrl: rawMimeType === "application/pdf" ? rawUploadData.url : undefined
         });
 
-        // Update the PDF attachment to indicate it has associated JSON
+        // Update the original file attachment to indicate it has associated JSON
         attachments[0].associatedPdfName = originalFilename;
       } catch (error) {
-        logger.upload.error("Failed to process PDF", {
+        logger.upload.error(`Failed to process ${rawMimeType} file`, {
           error: error instanceof Error ? error.message : "Unknown error",
         });
-        // We still return the raw PDF as a fallback
+        // We still return the raw file as a fallback
       }
     }
 

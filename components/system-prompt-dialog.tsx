@@ -83,6 +83,9 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
     formatFileType(file.metadata.fileType)
   ].filter(Boolean).join(' • ') : '';
 
+  // Check if the file is a PDF
+  const isPdf = file.metadata?.fileType?.toLowerCase().includes('pdf') || file.metadata?.fileType === 'application/pdf';
+
   return (
     <Collapsible.Root open={isOpen} onOpenChange={setIsOpen} className="w-full">
       <div className="flex items-center justify-between p-2 rounded-md border">
@@ -99,7 +102,7 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
             </Collapsible.Trigger>
             <FileIcon className="size-4 text-muted-foreground" weight="fill" />
             <span className="font-medium">{file.name}</span>
-            {file.metadata?.url && (
+            {isPdf && file.metadata?.url && (
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -376,9 +379,15 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
       });
 
       if (!response.ok) throw new Error('Failed to delete system message');
+      
+      // Update the files state to remove the deleted file
+      setFiles(prevFiles => prevFiles.filter(f => f.id !== file.id));
+      
     } catch (error) {
       console.error('Error removing file:', error);
       setError('Failed to remove document');
+    } finally {
+      setIsLoading(false);
     }
   };
 

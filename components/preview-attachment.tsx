@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from 'next/image';
+import { cn } from "@/lib/utils";
+import { File, FilePdf, FileText, X, Spinner } from "@phosphor-icons/react";
 
 import { LoaderIcon, CrossSmallIcon } from "./icons";
 import { Button } from "./ui/button";
@@ -17,41 +19,30 @@ import { PdfOverlay } from "./pdf-overlay";
 */
 
 function JsonIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      {/* Background */}
-      <path
-        d="M6 2C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V7L15 2H6Z"
-        fill="currentColor"
-        fillOpacity="0.2"
-      />
-      {/* {...} */}
-      <text
-        x="7.5"
-        y="15"
-        fontSize="9"
-        fontFamily="monospace"
-        fill="currentColor"
-      >
-        {"{...}"}
-      </text>
-      {/* Folded Corner */}
-      <path
-        d="M20 7L15 2V5C15 6.10457 15.8954 7 17 7H20Z"
-        fill="currentColor"
-        fillOpacity="0.4"
-      />
-    </svg>
-  );
+  return <File className={className} weight="fill" />;
 }
 
-function PdfProcessingAnimation() {
+function TextFileIcon({ className }: { className?: string }) {
+  return <FileText className={className} weight="fill" />;
+}
+
+function FileProcessingAnimation({ type }: { type: 'pdf' | 'text' }) {
+  const colors = type === 'pdf' 
+    ? {
+        bg: 'bg-red-50/80 dark:bg-red-950/50',
+        icon: 'bg-red-200/90 dark:bg-red-800/80',
+        lines: 'bg-red-300/90 dark:bg-red-700/80',
+        text: 'text-red-600 dark:text-red-400'
+      }
+    : {
+        bg: 'bg-blue-50/80 dark:bg-blue-950/50',
+        icon: 'bg-blue-200/90 dark:bg-blue-800/80',
+        lines: 'bg-blue-300/90 dark:bg-blue-700/80',
+        text: 'text-blue-600 dark:text-blue-400'
+      };
+
   return (
-    <div className="relative size-full bg-red-50/80 dark:bg-red-950/50 rounded-[var(--radius-sm)] flex items-center justify-center transition-colors duration-200">
+    <div className={cn("relative size-full rounded-[var(--radius-sm)] flex items-center justify-center transition-colors duration-200", colors.bg)}>
       <motion.div 
         className="size-12 h-14 relative"
         animate={{ 
@@ -64,11 +55,11 @@ function PdfProcessingAnimation() {
           ease: "easeInOut"
         }}
       >
-        {/* PDF icon base */}
-        <div className="absolute inset-0 bg-red-200/90 dark:bg-red-800/80 rounded-sm transition-colors duration-200" />
+        {/* Icon base */}
+        <div className={cn("absolute inset-0 rounded-sm transition-colors duration-200", colors.icon)} />
         {/* Lines animation */}
         <motion.div 
-          className="absolute inset-x-2 h-1 bg-red-300/90 dark:bg-red-700/80 rounded-full transition-colors duration-200"
+          className={cn("absolute inset-x-2 h-1 rounded-full transition-colors duration-200", colors.lines)}
           initial={{ y: 3 }}
           animate={{ 
             y: [3, 6, 9, 6, 3],
@@ -81,7 +72,7 @@ function PdfProcessingAnimation() {
           }}
         />
         <motion.div 
-          className="absolute inset-x-2 h-1 bg-red-300/90 dark:bg-red-700/80 rounded-full transition-colors duration-200"
+          className={cn("absolute inset-x-2 h-1 rounded-full transition-colors duration-200", colors.lines)}
           initial={{ y: 6 }}
           animate={{ 
             y: [6, 9, 12, 9, 6],
@@ -95,7 +86,7 @@ function PdfProcessingAnimation() {
           }}
         />
         <motion.div 
-          className="absolute inset-x-2 h-1 bg-red-300/90 dark:bg-red-700/80 rounded-full transition-colors duration-200"
+          className={cn("absolute inset-x-2 h-1 rounded-full transition-colors duration-200", colors.lines)}
           initial={{ y: 9 }}
           animate={{ 
             y: [9, 12, 15, 12, 9],
@@ -110,12 +101,12 @@ function PdfProcessingAnimation() {
         />
       </motion.div>
       <motion.div 
-        className="absolute bottom-2 text-xs text-red-600 dark:text-red-400 font-medium transition-colors duration-200"
+        className={cn("absolute bottom-2 text-xs font-medium transition-colors duration-200", colors.text)}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
       >
-        Processing PDF
+        Processing {type === 'pdf' ? 'PDF' : 'Text'}
       </motion.div>
     </div>
   );
@@ -131,7 +122,7 @@ export const PreviewAttachment = ({
     name?: string;
     contentType?: string;
     isAzureExtractedJson?: boolean;
-    associatedPdfName?: string;  // Name of the PDF this JSON is associated with
+    associatedPdfName?: string;
   };
   isUploading?: boolean;
   onRemove?: () => void;
@@ -155,118 +146,131 @@ export const PreviewAttachment = ({
     onRemove?.();
   };
 
-  // Simple check if it's an image
   const isImage = contentType?.startsWith("image/") ?? false;
-  // Check if it's a PDF
   const isPdf = contentType === "application/pdf";
-  // Check if it's a manually uploaded JSON file (not from Azure DI)
+  const isText = contentType === "text/plain";
   const isJson = contentType === "application/json" && !isAzureExtractedJson;
-  // Check if this PDF has an associated JSON context (by checking if this PDF's name matches any JSON's associatedPdfName)
-  const hasContext = isPdf && associatedPdfName === displayName;
+  const hasContext = (isPdf || isText) && associatedPdfName === displayName;
 
-  // Don't render Azure extracted JSON files
-  if (isAzureExtractedJson) {
-    return null;
-  }
+  if (isAzureExtractedJson) return null;
+
+  const getFileColor = () => {
+    if (isPdf) return "hover:bg-red-100/80 dark:hover:bg-red-900/50";
+    if (isText || isJson) return "hover:bg-blue-100/80 dark:hover:bg-blue-900/50";
+    return "hover:bg-zinc-100/80 dark:hover:bg-zinc-900/50";
+  };
+
+  const handleBoxClick = () => {
+    if (isImage) {
+      setIsImageOverlayOpen(true);
+    } else if (isPdf) {
+      setIsPdfOverlayOpen(true);
+    }
+  };
 
   return (
     <>
-      <div className="group relative mb-6">
-        {hasContext && (
-          <motion.div 
-            className="absolute -bottom-8 left-0 flex items-center gap-1.5 px-2 py-0.5 bg-green-50/80 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-full z-20 shadow-sm backdrop-blur-sm"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="size-1.5 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
-            <span className="text-[10px] text-green-700 dark:text-green-300 whitespace-nowrap font-medium">Context loaded</span>
-          </motion.div>
-        )}
-
+      <div className="group relative">
         <div
           role="button"
           tabIndex={0}
-          className="size-full bg-muted dark:bg-muted/40 rounded-[var(--radius-sm)] flex items-center justify-center cursor-pointer overflow-visible"
+          className={cn(
+            "relative w-full min-w-[200px] h-14 bg-muted/40 dark:bg-muted/20",
+            "rounded-lg border border-border/50 dark:border-border/30",
+            "flex items-center gap-3 px-3 cursor-pointer overflow-visible",
+            "transition-all duration-200",
+            getFileColor(),
+            isUploading && "opacity-80",
+            (isImage || isPdf) && !isUploading && "cursor-pointer"
+          )}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
+          onClick={!isUploading ? handleBoxClick : undefined}
         >
-          {isImage && (
-            <Image
-              src={url}
-              alt={name}
-              width={48}
-              height={48}
-              className="object-cover"
-              onClick={() => setIsImageOverlayOpen(true)}
-            />
-          )}
+          {/* File Icon/Preview Section */}
+          <div className="size-8 flex items-center justify-center shrink-0">
+            {isImage && (
+              <Image
+                src={url}
+                alt={name}
+                width={32}
+                height={32}
+                className="object-cover rounded"
+              />
+            )}
 
-          {isPdf && !isUploading && (
-            <div className="size-full overflow-visible">
-              <div
-                role="button"
-                tabIndex={0}
-                className="size-full hover:bg-red-100/80 dark:hover:bg-red-900/50 transition-colors rounded-[var(--radius-sm)] backdrop-blur-sm"
-                onClick={() => setIsPdfOverlayOpen(true)}
-              >
-                <Image
-                  src="/images/256px-PDF_file_icon.svg.png"
-                  alt="PDF file"
-                  width={48}
-                  height={48}
-                  className="object-contain opacity-90 dark:opacity-70 transition-opacity"
-                />
+            {isPdf && !isUploading && (
+              <div className="size-full flex items-center justify-center">
+                <FilePdf className="size-8 text-red-500 dark:text-red-400" weight="fill" />
               </div>
-            </div>
-          )}
+            )}
 
-          {isPdf && isUploading && (
-            <PdfProcessingAnimation />
-          )}
+            {isPdf && isUploading && (
+              <div className="size-full scale-75">
+                <FileProcessingAnimation type="pdf" />
+              </div>
+            )}
 
-          {isJson && (
-            <div
-              className="size-full hover:bg-blue-100/80 dark:hover:bg-blue-900/50 transition-colors rounded-[var(--radius-sm)] backdrop-blur-sm"
-            >
-              <JsonIcon className="size-16 text-blue-500 dark:text-blue-400" />
-            </div>
-          )}
+            {isText && !isUploading && (
+              <TextFileIcon className="size-8 text-blue-500 dark:text-blue-400" />
+            )}
 
-          {!isImage && !isPdf && !isJson && !isUploading && (
-            <div className="text-xs text-muted-foreground px-2 text-center">
-              {contentType?.split("/").pop() || "unknown"}
-            </div>
-          )}
+            {isText && isUploading && (
+              <div className="size-full scale-75">
+                <FileProcessingAnimation type="text" />
+              </div>
+            )}
 
-          {isUploading && !isPdf && (
-            <div className="animate-spin absolute text-muted-foreground">
-              <LoaderIcon />
-            </div>
-          )}
+            {isJson && (
+              <JsonIcon className="size-8 text-blue-500 dark:text-blue-400" />
+            )}
 
+            {!isImage && !isPdf && !isText && !isJson && !isUploading && (
+              <div className="text-xs text-muted-foreground">
+                {contentType?.split("/").pop() || "unknown"}
+              </div>
+            )}
+
+            {isUploading && !isPdf && !isText && (
+              <div className="animate-spin text-muted-foreground">
+                <Spinner size={16} />
+              </div>
+            )}
+          </div>
+
+          {/* File Info Section */}
+          <div className="flex flex-col min-w-0 gap-0.5 py-2">
+            <p className="text-sm font-medium truncate text-foreground">
+              {displayName}
+            </p>
+            {hasContext && (
+              <div className="flex items-center gap-1.5">
+                <div className="size-1.5 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
+                <span className="text-[10px] text-green-700 dark:text-green-300 font-medium">
+                  Context loaded
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Remove Button */}
           {!isUploading && onRemove && (
             <Button
               size="icon"
               variant="ghost"
-              className="absolute -top-2 -right-2 size-5 rounded-full bg-background/80 dark:bg-background/40 hover:bg-background/90 dark:hover:bg-background/60 border dark:border-zinc-700/80 shadow-sm z-10 backdrop-blur-sm text-foreground/80"
+              className={cn(
+                "absolute -top-2 -right-2 size-5",
+                "rounded-full bg-background/80 dark:bg-background/40",
+                "hover:bg-background/90 dark:hover:bg-background/60",
+                "border dark:border-zinc-700/80 shadow-sm",
+                "text-foreground/80 opacity-0 group-hover:opacity-100",
+                "transition-all duration-200"
+              )}
               onClick={handleRemove}
             >
-              <CrossSmallIcon size={12} />
+              <X size={12} weight="bold" />
             </Button>
           )}
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ 
-              opacity: isHovered ? 1 : 0,
-              y: isHovered ? 0 : 10
-            }}
-            transition={{ duration: 0.2 }}
-            className="absolute -bottom-2 left-1/2 -translate-x-1/2 translate-y-full px-2 py-1 bg-background/90 dark:bg-zinc-800/90 text-foreground backdrop-blur-sm text-xs rounded-md whitespace-nowrap z-50 border dark:border-zinc-700/50"
-          >
-            {displayName}
-          </motion.div>
         </div>
       </div>
 
