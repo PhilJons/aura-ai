@@ -170,6 +170,7 @@ export function Chat({
         selectedModelId={selectedChatModel}
         selectedVisibilityType={selectedVisibilityType}
         isReadonly={isReadonly}
+        isLoading={isLoading}
       />
 
       <Messages

@@ -5,6 +5,7 @@ import React, { memo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './code-block';
+import { cn } from '@/lib/utils';
 
 const components: Partial<Components> = {
   // @ts-expect-error
@@ -85,12 +86,12 @@ const components: Partial<Components> = {
 };
 
 export const Markdown = memo(
-  ({ children }: { children: string }) => {
+  ({ children, className }: { children: string; className?: string }) => {
     return (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={components}
-        className="prose dark:prose-invert max-w-none"
+        className={cn("prose dark:prose-invert max-w-none", className)}
       >
         {children}
       </ReactMarkdown>

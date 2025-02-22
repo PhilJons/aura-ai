@@ -157,6 +157,8 @@ export async function POST(request: Request) {
       contentType: string;
       isAzureExtractedJson?: boolean;
       associatedPdfName?: string;
+      originalName?: string;
+      pdfUrl?: string;
     }> = [
       {
         url: rawUploadData.url,
@@ -182,6 +184,7 @@ export async function POST(request: Request) {
             language: processed.language,
             images: processed.images,
           },
+          url: rawUploadData.url
         });
 
         logger.upload.info("Uploading extracted text JSON to blob storage", {
@@ -198,7 +201,9 @@ export async function POST(request: Request) {
           url: jsonUploadData.url,
           name: jsonFilename,
           contentType: "application/json",
-          isAzureExtractedJson: true
+          isAzureExtractedJson: true,
+          originalName: originalFilename,
+          pdfUrl: rawUploadData.url
         });
 
         // Update the PDF attachment to indicate it has associated JSON

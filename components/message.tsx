@@ -261,11 +261,11 @@ const PurePreviewMessage = ({
 
                 <div
                   className={cn("flex flex-col gap-4", {
-                    "bg-primary text-primary-foreground dark:bg-zinc-800 dark:text-foreground px-3 py-2 rounded-[var(--radius-lg)]":
+                    "bg-primary text-primary-foreground dark:bg-primary dark:text-primary-foreground px-3 py-2 rounded-[var(--radius-lg)] [&_*]:!text-primary-foreground dark:[&_*]:!text-primary-foreground":
                       messageWithStableId.role === "user"
                   })}
                 >
-                  <Markdown>
+                  <Markdown className="[&_*]:!text-inherit">
                     {(() => {
                       const content = messageWithStableId.content;
                       

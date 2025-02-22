@@ -35,7 +35,7 @@ function PureMessages({
     useScrollToBottom<HTMLDivElement>();
 
   useEffect(() => {
-    debug('messages', 'Messages state updated', {
+    debug('message', 'Messages state updated', {
       messageCount: messages.length,
       messages: messages.map(m => ({
         id: m.id,
@@ -47,14 +47,19 @@ function PureMessages({
     });
   }, [messages, isLoading]);
 
+  // Filter out system messages containing document intelligence analysis
+  const visibleMessages = messages.filter(
+    msg => !(msg.role === 'system' && typeof msg.content === 'string' && msg.content.startsWith('Document Intelligence Analysis:'))
+  );
+
   return (
     <div
       ref={messagesContainerRef}
       className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4"
     >
-      {messages.length === 0 && <Overview />}
+      {visibleMessages.length === 0 && <Overview />}
 
-      {messages.map((message, index) => (
+      {visibleMessages.map((message, index) => (
         <PreviewMessage
           key={message.id}
           chatId={chatId}

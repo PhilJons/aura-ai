@@ -10,18 +10,23 @@ import { useSidebar } from './ui/sidebar';
 import { memo } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { type VisibilityType, VisibilitySelector } from './visibility-selector';
+import { SystemPromptDialog } from '@/components/system-prompt-dialog';
+
+interface ChatHeaderProps {
+  chatId: string;
+  selectedModelId: string;
+  selectedVisibilityType: VisibilityType;
+  isReadonly: boolean;
+  isLoading: boolean;
+}
 
 function PureChatHeader({
   chatId,
   selectedModelId,
   selectedVisibilityType,
   isReadonly,
-}: {
-  chatId: string;
-  selectedModelId: string;
-  selectedVisibilityType: VisibilityType;
-  isReadonly: boolean;
-}) {
+  isLoading,
+}: ChatHeaderProps) {
   const router = useRouter();
   const { open } = useSidebar();
 
@@ -50,24 +55,26 @@ function PureChatHeader({
         </Tooltip>
       )}
 
-      {!isReadonly && (
-        <ModelSelector
-          selectedModelId={selectedModelId}
+      <div className="flex items-center gap-2">
+        <ModelSelector 
+          selectedModelId={selectedModelId} 
           className="order-1 md:order-2"
         />
-      )}
-
-      {!isReadonly && (
         <VisibilitySelector
           chatId={chatId}
           selectedVisibilityType={selectedVisibilityType}
           className="order-1 md:order-3"
         />
-      )}
+      </div>
+
+      <div className="flex items-center">
+        <SystemPromptDialog chatId={chatId} isProcessingMessage={isLoading} />
+      </div>
     </header>
   );
 }
 
 export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
-  return prevProps.selectedModelId === nextProps.selectedModelId;
+  return prevProps.selectedModelId === nextProps.selectedModelId &&
+         prevProps.isLoading === nextProps.isLoading;
 });

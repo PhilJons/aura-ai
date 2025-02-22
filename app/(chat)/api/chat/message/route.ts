@@ -3,10 +3,13 @@ import { containers } from '@/lib/db/cosmos';
 import type { Message } from '@/lib/db/schema';
 import { getMessagesByChatId } from '@/lib/db/queries';
 import { debug } from '@/lib/utils/debug';
+import { convertToUIMessages } from '@/lib/utils';
+import { emitDocumentContextUpdate } from '@/lib/utils/stream';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('chatId');
+  const includeSystem = searchParams.get('includeSystem') === 'true';
 
   if (!id) {
     return new Response('Missing chat ID', { status: 400 });
@@ -17,10 +20,21 @@ export async function GET(request: Request) {
   try {
     const messages = await getMessagesByChatId({ id });
     
+    // Only filter out system messages if not specifically requested
+    const filteredMessages = includeSystem 
+      ? messages 
+      : messages.filter(msg => 
+          !(msg.role === 'system' && typeof msg.content === 'string' && msg.content.startsWith('Document Intelligence Analysis:'))
+        );
+    
+    // Convert to UI messages
+    const uiMessages = convertToUIMessages(filteredMessages);
+    
     debug('message', 'Chat messages loaded', { 
       chatId: id,
-      messageCount: messages.length,
-      hasDocuments: messages.some(msg => 
+      messageCount: uiMessages.length,
+      includesSystem: includeSystem,
+      hasDocuments: uiMessages.some(msg => 
         msg.content.includes('"kind":') && 
         (msg.content.includes('"text"') || 
          msg.content.includes('"code"') || 
@@ -29,7 +43,7 @@ export async function GET(request: Request) {
       )
     });
 
-    return Response.json(messages);
+    return Response.json(uiMessages);
   } catch (error) {
     console.error('Error loading messages:', error);
     return new Response('Error loading messages', { status: 500 });
@@ -123,5 +137,52 @@ export async function PATCH(request: Request) {
       stack: error instanceof Error ? error.stack : undefined
     });
     return new Response(errorMessage, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const chatId = searchParams.get('chatId');
+  const messageId = searchParams.get('messageId');
+
+  if (!chatId || !messageId) {
+    return new Response('Missing required parameters', { status: 400 });
+  }
+
+  const session = await auth();
+  if (!session || !session.user || !session.user.id) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  try {
+    // First verify the message exists and belongs to the chat
+    const querySpec = {
+      query: 'SELECT * FROM c WHERE c.id = @messageId AND c.chatId = @chatId AND c.type = "message"',
+      parameters: [
+        { name: '@messageId', value: messageId },
+        { name: '@chatId', value: chatId }
+      ]
+    };
+
+    const { resources } = await containers.messages.items.query(querySpec).fetchAll();
+    const message = resources[0] as Message | undefined;
+
+    if (!message) {
+      return new Response('Message not found', { status: 404 });
+    }
+
+    // Delete the message using both id and partition key
+    await containers.messages.item(messageId, chatId).delete();
+
+    // Emit document context update if it was a system message
+    if (message.role === 'system' && typeof message.content === 'string' && 
+        message.content.startsWith('Document Intelligence Analysis:')) {
+      await emitDocumentContextUpdate(chatId);
+    }
+
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    console.error('Error deleting message:', error);
+    return new Response('Error deleting message', { status: 500 });
   }
 } 
