@@ -416,7 +416,7 @@ function PureMultimodalInput({
                 >
                   <div className="size-6 text-blue-500 dark:text-blue-400">
                     <svg 
-                      className="w-6 h-6"
+                      className="size-6"
                       fill="none" 
                       viewBox="0 0 24 24" 
                       stroke="currentColor"

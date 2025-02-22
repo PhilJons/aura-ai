@@ -1,9 +1,6 @@
 import { memo } from 'react';
 
 import type { BlockKind } from './block';
-import { FileIcon, LoaderIcon, MessageIcon, PencilEditIcon } from './icons';
-import { toast } from 'sonner';
-import { useBlock } from '@/hooks/use-block';
 
 const getActionText = (
   type: 'create' | 'update' | 'request-suggestions',
@@ -23,7 +20,7 @@ const getActionText = (
   }
 };
 
-interface DocumentToolResultProps {
+export interface DocumentToolResultProps {
   type: 'create' | 'update' | 'request-suggestions';
   result: { id: string; title: string; kind: BlockKind };
   isReadonly: boolean;

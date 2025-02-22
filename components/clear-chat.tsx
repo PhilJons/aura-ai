@@ -52,8 +52,13 @@ export function ClearChat({ chatId, isReadonly }: ClearChatProps) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-9 w-9">
-          <Trash2 className="h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9"
+          onClick={() => setIsOpen(true)}
+        >
+          <Trash2 className="size-4" />
           <span className="sr-only">Delete Chat</span>
         </Button>
       </DialogTrigger>

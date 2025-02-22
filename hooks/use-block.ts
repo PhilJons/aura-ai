@@ -2,8 +2,7 @@
 
 import useSWR from 'swr';
 import type { UIBlock } from '@/components/block';
-import { useCallback, useMemo, useRef } from 'react';
-import { debug } from '@/lib/utils/debug';
+import { useCallback, useMemo, } from 'react';
 
 export const initialBlockData: UIBlock = {
   documentId: 'init',

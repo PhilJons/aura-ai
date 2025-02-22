@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+
 
 const STREAM_CONNECTIONS = new Map<string, Set<ReadableStreamController>>();
 

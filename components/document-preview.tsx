@@ -90,33 +90,20 @@ export function DocumentPreview({
 
   // Memoize the bounding box update function
   const updateBoundingBox = useCallback(() => {
-    const boundingBox = isCompact 
-      ? compactButtonRef.current?.getBoundingClientRect()
-      : expandedDivRef.current?.getBoundingClientRect();
-
-    if (block.documentId && boundingBox) {
-      debug('document', 'Updating block bounding box', {
-        documentId: block.documentId,
-        boundingBox: {
-          left: boundingBox.x,
-          top: boundingBox.y,
-          width: boundingBox.width,
-          height: boundingBox.height,
-        },
-        previousBoundingBox: block.boundingBox,
-        isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-      });
-
-      setBlock((block) => ({
-        ...block,
-        boundingBox: {
-          left: boundingBox.x,
-          top: boundingBox.y,
-          width: boundingBox.width,
-          height: boundingBox.height,
-        },
-      }));
-    }
+    if (!block.documentId || isCompact) return;
+    
+    const boundingBox = expandedDivRef.current?.getBoundingClientRect();
+    if (!boundingBox) return;
+    
+    setBlock(block => ({
+      ...block,
+      boundingBox: {
+        left: boundingBox.x,
+        top: boundingBox.y,
+        width: boundingBox.width,
+        height: boundingBox.height,
+      },
+    }));
   }, [block.documentId, isCompact, setBlock]);
 
   useEffect(() => {
@@ -347,30 +334,27 @@ const PureHitboxLayer = ({
   result,
   setBlock,
 }: HitboxLayerProps) => {
-  const handleClick = useCallback(
-    (event: MouseEvent<HTMLElement>) => {
-      const boundingBox = event.currentTarget.getBoundingClientRect();
+  const handleClick = useCallback((event: MouseEvent<HTMLElement>) => {
+    const boundingBox = event.currentTarget.getBoundingClientRect();
 
-      setBlock((block) =>
-        block.status === 'streaming'
-          ? { ...block, isVisible: true }
-          : {
-              ...block,
-              title: result.title,
-              documentId: result.id,
-              kind: result.kind,
-              isVisible: true,
-              boundingBox: {
-                left: boundingBox.x,
-                top: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              },
+    setBlock((block) =>
+      block.status === 'streaming'
+        ? { ...block, isVisible: true }
+        : {
+            ...block,
+            title: result.title,
+            documentId: result.id,
+            kind: result.kind,
+            isVisible: true,
+            boundingBox: {
+              left: boundingBox.x,
+              top: boundingBox.y,
+              width: boundingBox.width,
+              height: boundingBox.height,
             },
-      );
-    },
-    [setBlock, result],
-  );
+          },
+    );
+  }, [setBlock, result]);
 
   return (
     <div

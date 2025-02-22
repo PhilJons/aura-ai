@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import React, { memo } from 'react';
+import { memo, Children, isValidElement } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './code-block';
@@ -27,8 +27,8 @@ const components: Partial<Components> = {
   // Handle paragraphs to prevent invalid nesting
   p: ({ children }) => {
     // Check if children contains only a code block
-    const childrenArray = React.Children.toArray(children);
-    if (childrenArray.length === 1 && React.isValidElement(childrenArray[0])) {
+    const childrenArray = Children.toArray(children);
+    if (childrenArray.length === 1 && isValidElement(childrenArray[0])) {
       const child = childrenArray[0];
       if (child.type === CodeBlock || (child.props && child.props.node?.tagName === 'code')) {
         return <>{children}</>;
@@ -39,8 +39,8 @@ const components: Partial<Components> = {
   // Handle pre tags
   pre: ({ children }) => {
     // Check if children is a CodeBlock
-    const childrenArray = React.Children.toArray(children);
-    if (childrenArray.length === 1 && React.isValidElement(childrenArray[0])) {
+    const childrenArray = Children.toArray(children);
+    if (childrenArray.length === 1 && isValidElement(childrenArray[0])) {
       const child = childrenArray[0];
       if (child.type === CodeBlock || (child.props && child.props.node?.tagName === 'code')) {
         return children;

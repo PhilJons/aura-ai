@@ -134,7 +134,7 @@ export function debug(namespace: DebugNamespace, message: string, data?: any) {
       ? data 
       : JSON.stringify(data, (key, value) => {
           if (typeof value === 'string' && value.length > 100) {
-            return value.substring(0, 100) + '...';
+            return `${value.substring(0, 100)}...`;
           }
           // Skip logging certain verbose fields
           if (['content', 'contentLength', 'hasContent', 'isStreaming'].includes(key)) {

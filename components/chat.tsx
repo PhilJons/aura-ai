@@ -8,13 +8,10 @@ import { debug } from '@/lib/utils/debug';
 
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
-import { fetcher, generateUUID } from '@/lib/utils';
-
-import { Block } from './block';
+import { fetcher, } from '@/lib/utils';
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
 import type { VisibilityType } from './visibility-selector';
-import { useBlockSelector } from '@/hooks/use-block';
 import { toast } from 'sonner';
 
 export function Chat({

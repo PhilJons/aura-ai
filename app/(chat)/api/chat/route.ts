@@ -14,7 +14,6 @@ import {
   saveMessages,
 } from '@/lib/db/queries';
 import type { Message as DBMessage } from '@/lib/db/schema';
-import { containers } from '@/lib/db/cosmos';
 import {
   generateUUID,
   getMostRecentUserMessage,
@@ -72,12 +71,7 @@ function processDocument(attachment: { text: string; metadata?: any; name: strin
   
   // Add fallback values for all metadata fields
   const metadata = attachment.metadata || {};
-  const metadataStr = `\nMetadata:\n` +
-    `- Pages: ${metadata.pages || 'Unknown'}\n` +
-    `- Language: ${metadata.language || 'Not specified'}\n` +
-    `- File Type: ${metadata.fileType || 'Unknown'}\n` +
-    `- Original Name: ${displayName}\n` +
-    `- URL: ${attachment.pdfUrl || 'Not available'}`;
+  const metadataStr = `\nMetadata:\n- Pages: ${metadata.pages || 'Unknown'}\n- Language: ${metadata.language || 'Not specified'}\n- File Type: ${metadata.fileType || 'Unknown'}\n- Original Name: ${displayName}\n- URL: ${attachment.pdfUrl || 'Not available'}`;
   
   // Calculate available tokens for the content
   const prefix = `Document Intelligence Analysis:\n\nContent from ${displayName}:${metadataStr}\n\n`;

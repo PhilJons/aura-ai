@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import Image from 'next/image';
 
 import { LoaderIcon, CrossSmallIcon } from "./icons";
 import { Button } from "./ui/button";
@@ -50,9 +51,9 @@ function JsonIcon({ className }: { className?: string }) {
 
 function PdfProcessingAnimation() {
   return (
-    <div className="relative w-full h-full bg-red-50/80 dark:bg-red-950/50 rounded-[var(--radius-sm)] flex items-center justify-center transition-colors duration-200">
+    <div className="relative size-full bg-red-50/80 dark:bg-red-950/50 rounded-[var(--radius-sm)] flex items-center justify-center transition-colors duration-200">
       <motion.div 
-        className="w-12 h-14 relative"
+        className="size-12 h-14 relative"
         animate={{ 
           scale: [1, 1.05, 1],
           opacity: [1, 0.7, 1] 
@@ -178,7 +179,7 @@ export const PreviewAttachment = ({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
+            <div className="size-1.5 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
             <span className="text-[10px] text-green-700 dark:text-green-300 whitespace-nowrap font-medium">Context loaded</span>
           </motion.div>
         )}
@@ -186,33 +187,35 @@ export const PreviewAttachment = ({
         <div
           role="button"
           tabIndex={0}
-          className="relative w-32 h-24 bg-muted dark:bg-muted/40 rounded-[var(--radius-sm)] flex items-center justify-center cursor-pointer overflow-visible"
+          className="size-full bg-muted dark:bg-muted/40 rounded-[var(--radius-sm)] flex items-center justify-center cursor-pointer overflow-visible"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           {isImage && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={url}
+            <Image
               src={url}
-              alt={displayName}
-              className="rounded-[var(--radius-sm)] size-full object-cover"
+              alt={name}
+              width={48}
+              height={48}
+              className="object-cover"
               onClick={() => setIsImageOverlayOpen(true)}
             />
           )}
 
           {isPdf && !isUploading && (
-            <div className="relative w-full h-full overflow-visible">
+            <div className="size-full overflow-visible">
               <div
                 role="button"
                 tabIndex={0}
-                className="bg-red-50/80 dark:bg-red-950/50 flex items-center justify-center w-full h-full hover:bg-red-100/80 dark:hover:bg-red-900/50 transition-colors rounded-[var(--radius-sm)] backdrop-blur-sm"
+                className="size-full hover:bg-red-100/80 dark:hover:bg-red-900/50 transition-colors rounded-[var(--radius-sm)] backdrop-blur-sm"
                 onClick={() => setIsPdfOverlayOpen(true)}
               >
-                <img 
+                <Image
                   src="/images/256px-PDF_file_icon.svg.png"
                   alt="PDF file"
-                  className="w-12 h-12 object-contain opacity-90 dark:opacity-70 transition-opacity"
+                  width={48}
+                  height={48}
+                  className="object-contain opacity-90 dark:opacity-70 transition-opacity"
                 />
               </div>
             </div>
@@ -224,9 +227,9 @@ export const PreviewAttachment = ({
 
           {isJson && (
             <div
-              className="bg-blue-50/80 dark:bg-blue-950/50 flex items-center justify-center w-full h-full hover:bg-blue-100/80 dark:hover:bg-blue-900/50 transition-colors rounded-[var(--radius-sm)] backdrop-blur-sm"
+              className="size-full hover:bg-blue-100/80 dark:hover:bg-blue-900/50 transition-colors rounded-[var(--radius-sm)] backdrop-blur-sm"
             >
-              <JsonIcon className="w-16 h-16 text-blue-500 dark:text-blue-400" />
+              <JsonIcon className="size-16 text-blue-500 dark:text-blue-400" />
             </div>
           )}
 

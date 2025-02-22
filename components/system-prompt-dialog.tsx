@@ -86,18 +86,18 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
   return (
     <Collapsible.Root open={isOpen} onOpenChange={setIsOpen} className="w-full">
       <div className="flex items-center justify-between p-2 rounded-md border">
-        <div className="flex flex-col flex-grow">
+        <div className="grow">
           <div className="flex items-center gap-2">
             <Collapsible.Trigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-accent">
+              <Button variant="ghost" size="icon" className="size-6 hover:bg-accent">
                 {isOpen ? (
-                  <CaretDown className="h-4 w-4" />
+                  <CaretDown className="size-4" />
                 ) : (
-                  <CaretRight className="h-4 w-4" />
+                  <CaretRight className="size-4" />
                 )}
               </Button>
             </Collapsible.Trigger>
-            <FileIcon className="h-4 w-4 text-muted-foreground" weight="fill" />
+            <FileIcon className="size-4 text-muted-foreground" weight="fill" />
             <span className="font-medium">{file.name}</span>
             {file.metadata?.url && (
               <Button 
@@ -126,11 +126,11 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="size-8"
           onClick={() => handleRemove(file)}
           disabled={isLoading}
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
           <span className="sr-only">Remove {file.name}</span>
         </Button>
       </div>
@@ -168,7 +168,7 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
 
     // Extract metadata if present
     const metadataStartIndex = lines.findIndex((line: string) => line.trim() === 'Metadata:');
-    let metadata: Record<string, string> = {};
+    const metadata: Record<string, string> = {};
     let documentContent = '';
     let originalName = '';
     let url = '';
@@ -251,7 +251,7 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
   useEffect(() => {
     console.log('Initial fetch for chat:', chatId);
     fetchSystemContent();
-  }, [fetchSystemContent]);
+  }, [fetchSystemContent, chatId]);
 
   // Polling effect for document processing
   useEffect(() => {
@@ -296,7 +296,7 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
       }
       setIsInitialPolling(false);
     };
-  }, [fetchSystemContent, isProcessingMessage, hasStartedPolling]);
+  }, [fetchSystemContent, isProcessingMessage, hasStartedPolling, chatId]);
 
   // Reset polling state when chat ID changes or processing stops
   useEffect(() => {
@@ -389,18 +389,18 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
           <Button 
             variant="ghost" 
             size="icon" 
-            className="h-9 w-9 relative" 
+            className="size-9 relative" 
             aria-label="View Document Context"
           >
-            <Info className="h-4 w-4" />
+            <Info className="size-4" />
             {files.length > 0 && (
-              <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium flex items-center justify-center text-primary-foreground">
+              <div className="absolute -top-1 -right-1 size-4 rounded-full bg-primary text-[10px] font-medium flex items-center justify-center text-primary-foreground">
                 {files.length}
               </div>
             )}
             {isInitialPolling && (
               <div className="absolute inset-0 rounded-md bg-background/80 flex items-center justify-center">
-                <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <div className="size-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             )}
             <span className="sr-only">View Document Context</span>

@@ -54,7 +54,7 @@ export function PdfOverlay({
           <object
             data={pdfUrl}
             type="application/pdf"
-            className="w-full h-full"
+            className="size-full"
             aria-label={altText || "PDF document"}
             onLoad={() => setLoaded(true)}
           >
@@ -64,7 +64,7 @@ export function PdfOverlay({
           </object>
 
           {!loaded && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/50 dark:bg-zinc-900/50 text-foreground dark:text-zinc-300 backdrop-blur-sm transition-colors">
+            <div className="absolute inset-0 flex items-center justify-center bg-background/50 dark:bg-zinc-900/50 text-foreground dark:text-zinc-300 backdrop-blur-sm transition-colors size-full">
               Loading PDF...
             </div>
           )}

@@ -9,7 +9,6 @@ import { DocumentToolCall, DocumentToolResult } from "./document";
 import { PencilEditIcon, SparklesIcon } from "./icons";
 import { Markdown } from "./markdown";
 import { MessageActions } from "./message-actions";
-import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
 import equal from "fast-deep-equal";
 import { cn } from "@/lib/utils";
@@ -22,18 +21,11 @@ import { debug } from "@/lib/utils/debug";
 import { useBlock } from "@/hooks/use-block";
 import type { UIBlock, BlockKind } from "./block";
 
-interface DocumentToolResult {
-  id: string;
-  title: string;
-  kind: BlockKind;
-  content?: string;
-}
-
 interface DocumentToolInvocation {
   toolName: string;
   toolCallId: string;
   state: "result";
-  result: DocumentToolResult;
+  result: { id: string; title: string; kind: BlockKind; content?: string };
 }
 
 interface ToolInvocationBase {
@@ -48,7 +40,7 @@ interface ToolInvocationCall extends ToolInvocationBase {
 
 interface ToolInvocationResult extends ToolInvocationBase {
   state: 'result';
-  result: DocumentToolResult;
+  result: { id: string; title: string; kind: BlockKind; content?: string };
 }
 
 type ToolInvocation = ToolInvocationCall | ToolInvocationResult;
@@ -192,7 +184,7 @@ const PurePreviewMessage = ({
     debug('message', 'Message rendered', {
       messageId: messageWithStableId.id,
       role: messageWithStableId.role,
-      content: typeof messageWithStableId.content === 'string' ? messageWithStableId.content?.substring(0, 100) + '...' : JSON.stringify(messageWithStableId.content)?.substring(0, 100) + '...',
+      content: typeof messageWithStableId.content === 'string' ? `${messageWithStableId.content?.substring(0, 100)}...` : `${JSON.stringify(messageWithStableId.content)?.substring(0, 100)}...`,
       hasToolInvocations: !!messageWithStableId.toolInvocations?.length,
       toolInvocations: messageWithStableId.toolInvocations?.map(t => ({
         state: t.state,
@@ -276,12 +268,12 @@ const PurePreviewMessage = ({
 
                 <div
                   className={cn("flex flex-col gap-0", {
-                    "bg-primary text-primary-foreground dark:bg-primary dark:text-primary-foreground px-4 py-2.5 rounded-[var(--radius-lg)] [&_*]:!text-primary-foreground dark:[&_*]:!text-primary-foreground":
+                    "bg-primary text-primary-foreground dark:bg-primary dark:text-primary-foreground px-4 py-2.5 rounded-[var(--radius-lg)] [&_p]:!m-0 [&_*]:!text-primary-foreground dark:[&_*]:!text-primary-foreground":
                       messageWithStableId.role === "user"
                   })}
                 >
                   <div className="!mb-0">
-                    <Markdown className="[&_*]:!text-inherit [&_p]:!m-0 [&>*:last-child]:!mb-0 [&>*:first-child]:!mt-0 [&_p]:!mb-0">
+                    <Markdown className="[&_*]:!text-inherit [&_p]:!m-0 [&>*:last-child]:!mb-0 [&>*:first-child]:!mt-0">
                       {(() => {
                         const content = messageWithStableId.content;
                         

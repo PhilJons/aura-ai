@@ -1,9 +1,8 @@
-import { generateUUID } from '@/lib/utils';
+
 import { type DataStreamWriter, tool } from 'ai';
 import { z } from 'zod';
 import type { Session } from 'next-auth';
-import { blockKinds, documentHandlersByBlockKind } from '@/lib/blocks/server';
-import { debug } from '@/lib/utils/debug';
+import { blockKinds, } from '@/lib/blocks/server';
 
 interface CreateDocumentProps {
   session: Session;
