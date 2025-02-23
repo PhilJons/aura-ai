@@ -1,72 +1,115 @@
+const streamControllers = new Map<string, Set<ReadableStreamDefaultController>>();
+const heartbeatIntervals = new Map<string, NodeJS.Timeout>();
+const fileUploadsInProgress = new Set<string>();
 
-
-const STREAM_CONNECTIONS = new Map<string, Set<ReadableStreamController>>();
-
-interface ReadableStreamController {
-  enqueue: (chunk: Uint8Array) => void;
-  close: () => void;
-  error: (error: Error) => void;
-}
-
-export function addStreamController(chatId: string, controller: ReadableStreamController) {
+export function addStreamController(chatId: string, controller: ReadableStreamDefaultController) {
+  let controllers = streamControllers.get(chatId);
+  if (!controllers) {
+    controllers = new Set();
+    streamControllers.set(chatId, controllers);
+  }
+  controllers.add(controller);
   console.log(`Adding stream controller for chat ${chatId}`);
-  if (!STREAM_CONNECTIONS.has(chatId)) {
-    STREAM_CONNECTIONS.set(chatId, new Set());
-  }
-  STREAM_CONNECTIONS.get(chatId)?.add(controller);
-  console.log(`Active connections for chat ${chatId}: ${STREAM_CONNECTIONS.get(chatId)?.size}`);
 }
 
-export function removeStreamController(chatId: string, controller: ReadableStreamController) {
-  console.log(`Removing stream controller for chat ${chatId}`);
-  const connections = STREAM_CONNECTIONS.get(chatId);
-  if (!connections) return;
-
-  connections.delete(controller);
-  console.log(`Remaining connections for chat ${chatId}: ${connections.size}`);
-
-  if (connections.size === 0) {
-    STREAM_CONNECTIONS.delete(chatId);
-    console.log(`Removed all connections for chat ${chatId}`);
+export function removeStreamController(chatId: string, controller: ReadableStreamDefaultController) {
+  const controllers = streamControllers.get(chatId);
+  if (controllers) {
+    controllers.delete(controller);
+    if (controllers.size === 0) {
+      streamControllers.delete(chatId);
+      stopHeartbeat(chatId);
+    }
   }
 }
 
-export async function emitDocumentContextUpdate(chatId: string) {
-  console.log(`Emitting document context update for chat ${chatId}`);
-  const controllers = STREAM_CONNECTIONS.get(chatId);
+function startHeartbeat(chatId: string) {
+  stopHeartbeat(chatId); // Clear existing first
   
+  const interval = setInterval(() => {
+    sendHeartbeat(chatId);
+  }, 1000);
+
+  // Auto-stop after 30s max duration
+  setTimeout(() => {
+    stopHeartbeat(chatId);
+  }, 30000);
+
+  heartbeatIntervals.set(chatId, interval);
+}
+
+function stopHeartbeat(chatId: string) {
+  const interval = heartbeatIntervals.get(chatId);
+  if (interval) {
+    clearInterval(interval);
+    heartbeatIntervals.delete(chatId);
+  }
+}
+
+export function markFileUploadStarted(chatId: string) {
+  fileUploadsInProgress.add(chatId);
+  startHeartbeat(chatId);
+}
+
+export function markFileUploadComplete(chatId: string) {
+  fileUploadsInProgress.delete(chatId);
+  stopHeartbeat(chatId);
+}
+
+function sendHeartbeat(chatId: string) {
+  const controllers = streamControllers.get(chatId);
+  if (controllers) {
+    for (const controller of controllers) {
+      try {
+        controller.enqueue('data: {"type":"heartbeat"}\n\n');
+      } catch (error) {
+        console.error('Error sending heartbeat:', error);
+      }
+    }
+  }
+}
+
+export async function emitDocumentContextUpdate(chatId: string, hasImages: boolean = false) {
+  const controllers = streamControllers.get(chatId);
   if (!controllers || controllers.size === 0) {
     console.log(`No active connections found for chat ${chatId}`);
     return;
   }
 
-  console.log(`Found ${controllers.size} active connections for chat ${chatId}`);
-  const encoder = new TextEncoder();
-  const message = encoder.encode(
-    `data: ${JSON.stringify({ 
-      type: 'document-context-update',
-      timestamp: new Date().toISOString()
-    })}\n\n`
-  );
-
-  const failedControllers = new Set<ReadableStreamController>();
-
-  controllers.forEach((controller) => {
+  // Send update
+  for (const controller of controllers) {
     try {
-      controller.enqueue(message);
-      console.log(`Successfully sent update to a controller for chat ${chatId}`);
+      controller.enqueue(`data: {"type":"document-context-update","hasImages":${hasImages}}\n\n`);
     } catch (error) {
-      console.error(`Error sending document context update for chat ${chatId}:`, error);
-      failedControllers.add(controller);
+      console.error('Error sending document context update:', error);
     }
-  });
+  }
 
-  // Clean up failed controllers
-  failedControllers.forEach(controller => {
-    removeStreamController(chatId, controller);
-  });
+  // Send completion after a short delay
+  setTimeout(() => {
+    const controllers = streamControllers.get(chatId);
+    if (controllers) {
+      for (const controller of controllers) {
+        try {
+          controller.enqueue('data: {"type":"document-context-update-complete"}\n\n');
+        } catch (error) {
+          console.error('Error sending document context update complete:', error);
+        }
+      }
+    }
+    stopHeartbeat(chatId);
+  }, 2000);
+}
 
-  if (failedControllers.size > 0) {
-    console.log(`Removed ${failedControllers.size} failed controllers for chat ${chatId}`);
+export function writeDataToStream(chatId: string, data: any) {
+  const controllers = streamControllers.get(chatId);
+  if (controllers) {
+    for (const controller of controllers) {
+      try {
+        controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
+      } catch (error) {
+        console.error('Error writing data to stream:', error);
+      }
+    }
   }
 } 

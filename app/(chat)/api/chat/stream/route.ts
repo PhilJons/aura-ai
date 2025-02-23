@@ -34,29 +34,9 @@ export async function GET(request: Request) {
         encoder.encode(`data: ${JSON.stringify(initialMessage)}\n\n`)
       );
 
-      // Keep the connection alive with a heartbeat every 15 seconds
-      const heartbeat = setInterval(() => {
-        try {
-          const heartbeatMessage = {
-            type: 'heartbeat',
-            timestamp: new Date().toISOString()
-          };
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(heartbeatMessage)}\n\n`)
-          );
-          console.log(`Sent heartbeat for chat ${chatId}`);
-        } catch (error) {
-          console.error(`Error sending heartbeat for chat ${chatId}:`, error);
-          clearInterval(heartbeat);
-          removeStreamController(chatId, controller);
-          controller.close();
-        }
-      }, 15000);
-
       // Clean up on close
       request.signal.addEventListener('abort', () => {
         console.log(`SSE connection aborted for chat ${chatId}`);
-        clearInterval(heartbeat);
         removeStreamController(chatId, controller);
         controller.close();
       });

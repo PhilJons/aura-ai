@@ -1,13 +1,15 @@
 'use client';
 
-import type { Attachment, Message } from 'ai';
+import type { Attachment, Message, ChatRequestOptions } from 'ai';
 import { useChat } from 'ai/react';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
+import { useRouter } from 'next/navigation';
 
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
 import { fetcher, generateUUID } from '@/lib/utils';
+import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
 
 import { Block } from './block';
 import { MultimodalInput } from './multimodal-input';
@@ -30,11 +32,13 @@ export function Chat({
   isReadonly: boolean;
 }) {
   const { mutate } = useSWRConfig();
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const router = useRouter();
 
   const {
     messages,
     setMessages,
-    handleSubmit,
+    handleSubmit: originalHandleSubmit,
     input,
     setInput,
     append,
@@ -43,13 +47,35 @@ export function Chat({
     reload,
   } = useChat({
     id,
-    body: { id, selectedChatModel: selectedChatModel },
+    body: { id, selectedChatModel },
     initialMessages,
     experimental_throttle: 100,
     sendExtraMessageFields: true,
     generateId: generateUUID,
     onFinish: () => {
       mutate('/api/history');
+      
+      if (attachments.length > 0) {
+        // Start processing
+        markFileUploadStarted(id);
+        
+        const eventSource = new EventSource(`/api/chat/stream?chatId=${id}`);
+        
+        eventSource.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'document-context-update-complete') {
+            // Processing done
+            markFileUploadComplete(id);
+            eventSource.close();
+          }
+        };
+
+        // Fallback timeout
+        setTimeout(() => {
+          markFileUploadComplete(id);
+          eventSource.close();
+        }, 10000);
+      }
     },
     onError: (error) => {
       if (error.message && !error.message.includes('message channel closed')) {
@@ -65,6 +91,45 @@ export function Chat({
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
 
+  const handleSubmit = useCallback(async (
+    event?: { preventDefault?: () => void } | undefined,
+    chatRequestOptions?: ChatRequestOptions | undefined
+  ) => {
+    if (!input.trim() || isLoading) return;
+
+    if (attachments.length > 0) {
+      setIsProcessingFile(true);
+      
+      // Start processing
+      markFileUploadStarted(id);
+      
+      // Wait a moment for SSE connection to establish
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      try {
+        await originalHandleSubmit(event, {
+          ...chatRequestOptions,
+          body: {
+            ...chatRequestOptions?.body,
+            attachments,
+          },
+        });
+        setAttachments([]);
+      } catch (err) {
+        console.error("Error sending message:", err);
+        toast.error("Failed to send message. Please try again.");
+        markFileUploadComplete(id);
+      }
+    } else {
+      try {
+        await originalHandleSubmit(event, chatRequestOptions);
+      } catch (err) {
+        console.error("Error sending message:", err);
+        toast.error("Failed to send message. Please try again.");
+      }
+    }
+  }, [attachments, input, isLoading, originalHandleSubmit, id]);
+
   return (
     <div className="flex flex-col min-w-0 h-dvh bg-background">
       <ChatHeader
@@ -73,6 +138,7 @@ export function Chat({
         selectedVisibilityType={selectedVisibilityType}
         isReadonly={isReadonly}
         isLoading={isLoading}
+        isProcessingFile={isProcessingFile}
       />
 
       <Messages
@@ -101,6 +167,7 @@ export function Chat({
             setMessages={setMessages}
             append={append}
             selectedChatModel={selectedChatModel}
+            setIsProcessingFile={setIsProcessingFile}
           />
         )}
       </form>

@@ -37,11 +37,13 @@ function PureMessages({
   useEffect(() => {
     debug('message', 'Messages state updated', {
       messageCount: messages.length,
+      systemMessageCount: messages.filter(msg => msg.role === 'system').length,
       messages: messages.map(m => ({
         id: m.id,
         role: m.role,
         hasToolInvocations: !!m.toolInvocations?.length,
-        toolInvocationStates: m.toolInvocations?.map(t => t.state)
+        toolInvocationStates: m.toolInvocations?.map(t => t.state),
+        isSystem: m.role === 'system' && typeof m.content === 'string' && m.content.startsWith('Document Intelligence Analysis:')
       })),
       isLoading
     });

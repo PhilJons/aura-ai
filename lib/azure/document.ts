@@ -29,7 +29,7 @@ export interface ProcessedDocument {
   language?: string;
   fileType: string;
   images?: Array<{
-    url?: string; // We'll let the caller decide if we re-upload images
+    url?: string;
     name?: string;
     contentType?: string;
   }>;
@@ -69,25 +69,21 @@ export async function processDocument(
       languages: result.languages,
     });
 
-    // Extract text content
-    const content = result.paragraphs?.map((p) => p.content).join("\n") || "";
+    // Extract text content, joining paragraphs with double newlines for better readability
+    const content = result.paragraphs?.map((p) => p.content).join("\n\n") || "";
 
-    // Optionally, you could also parse out images here if your Document Intelligence plan supports it.
-    // The result structure may differ or not include images. We'll placeholder for images, if any.
-    const extractedImages: Array<{
-      url?: string;
-      name?: string;
-      contentType?: string;
-    }> = [];
-
-    // If your plan doesn't return images, you can skip or fill out accordingly.
+    // Log the first 100 characters of content for debugging
+    logger.document.debug("Extracted content preview", {
+      contentPreview: content.substring(0, 100) + "...",
+      totalLength: content.length
+    });
 
     const processedDoc: ProcessedDocument = {
       text: content,
       pages: result.pages?.length || 1,
       language: result.languages?.[0]?.locale,
       fileType: mimeType,
-      images: extractedImages,
+      images: []
     };
 
     logger.document.info("Document processing completed successfully", {

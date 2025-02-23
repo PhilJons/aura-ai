@@ -86,6 +86,40 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { SuggestedActions } from "./suggested-actions";
 
+interface CustomAttachment extends Attachment {
+  isAzureExtractedJson?: boolean;
+  associatedPdfName?: string;
+  originalName?: string;
+  pdfUrl?: string;
+}
+
+interface MultimodalInputProps {
+  chatId: string;
+  input: string;
+  setInput: (value: string) => void;
+  isLoading: boolean;
+  stop: () => void;
+  attachments: Array<CustomAttachment>;
+  setAttachments: Dispatch<SetStateAction<Array<CustomAttachment>>>;
+  messages: Array<Message>;
+  setMessages: (
+    messages: Message[] | ((messages: Message[]) => Message[]),
+  ) => void;
+  append: (
+    message: Message | CreateMessage,
+    chatRequestOptions?: ChatRequestOptions,
+  ) => Promise<string | null | undefined>;
+  handleSubmit: (
+    event?: {
+      preventDefault?: () => void;
+    },
+    chatRequestOptions?: ChatRequestOptions,
+  ) => void;
+  className?: string;
+  selectedChatModel: string;
+  setIsProcessingFile: Dispatch<SetStateAction<boolean>>;
+}
+
 function validateFileType(file: File, selectedChatModel: string) {
   // For GPT-4o mini, only allow PDFs and text files
   if (selectedChatModel === "chat-model-small") {
@@ -118,29 +152,8 @@ function PureMultimodalInput({
   handleSubmit,
   className,
   selectedChatModel,
-}: {
-  chatId: string;
-  input: string;
-  setInput: (value: string) => void;
-  isLoading: boolean;
-  stop: () => void;
-  attachments: Array<Attachment>;
-  setAttachments: Dispatch<SetStateAction<Array<Attachment>>>;
-  messages: Array<Message>;
-  setMessages: Dispatch<SetStateAction<Array<Message>>>;
-  append: (
-    message: Message | CreateMessage,
-    chatRequestOptions?: ChatRequestOptions,
-  ) => Promise<string | null | undefined>;
-  handleSubmit: (
-    event?: {
-      preventDefault?: () => void;
-    },
-    chatRequestOptions?: ChatRequestOptions,
-  ) => void;
-  className?: string;
-  selectedChatModel: string;
-}) {
+  setIsProcessingFile,
+}: MultimodalInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
   const [textareaHeight, setTextareaHeight] = useState(40);
@@ -170,8 +183,18 @@ function PureMultimodalInput({
   const submitForm = useCallback(() => {
     window.history.replaceState({}, "", `/chat/${chatId}`);
 
+    // Filter attachments to only use the extracted text for PDFs and text files
+    const processedAttachments = attachments.filter(attachment => {
+      // Skip the raw PDF/text files, we'll use their extracted JSON instead
+      if (attachment.associatedPdfName) {
+        return false;
+      }
+      // Keep the extracted JSON and other supported file types
+      return true;
+    });
+
     handleSubmit(undefined, {
-      experimental_attachments: attachments,
+      experimental_attachments: processedAttachments,
     });
 
     setAttachments([]);
@@ -185,6 +208,7 @@ function PureMultimodalInput({
   const uploadFile = useCallback(async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("chatId", chatId);
 
     try {
       const response = await fetch("/api/files/upload", {
@@ -202,7 +226,7 @@ function PureMultimodalInput({
     } catch (error) {
       toast.error("Failed to upload file, please try again!");
     }
-  }, []);
+  }, [chatId]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -254,6 +278,7 @@ function PureMultimodalInput({
       files.forEach(file => validateFileType(file, selectedChatModel));
       
       setUploadQueue(files.map((file) => file.name));
+      setIsProcessingFile(true);
 
       const uploadPromises = files.map((file) => uploadFile(file));
       const uploadResults = await Promise.all(uploadPromises);
@@ -274,8 +299,9 @@ function PureMultimodalInput({
       }
     } finally {
       setUploadQueue([]);
+      setIsProcessingFile(false);
     }
-  }, [selectedChatModel, setAttachments, uploadFile]);
+  }, [selectedChatModel, setAttachments, uploadFile, setIsProcessingFile]);
 
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -286,6 +312,7 @@ function PureMultimodalInput({
         files.forEach(file => validateFileType(file, selectedChatModel));
         
         setUploadQueue(files.map((file) => file.name));
+        setIsProcessingFile(true);
 
         const uploadPromises = files.map((file) => uploadFile(file));
         const uploadResults = await Promise.all(uploadPromises);
@@ -306,9 +333,10 @@ function PureMultimodalInput({
         }
       } finally {
         setUploadQueue([]);
+        setIsProcessingFile(false);
       }
     },
-    [selectedChatModel, setAttachments, uploadFile],
+    [selectedChatModel, setAttachments, uploadFile, setIsProcessingFile],
   );
 
   return (
@@ -527,16 +555,12 @@ function PureMultimodalInput({
   );
 }
 
-export const MultimodalInput = memo(
-  PureMultimodalInput,
-  (prevProps, nextProps) => {
-    if (prevProps.input !== nextProps.input) return false;
-    if (prevProps.isLoading !== nextProps.isLoading) return false;
-    if (!equal(prevProps.attachments, nextProps.attachments)) return false;
-
-    return true;
-  },
-);
+export const MultimodalInput = memo(PureMultimodalInput, (prevProps, nextProps) => {
+  if (prevProps.input !== nextProps.input) return false;
+  if (prevProps.isLoading !== nextProps.isLoading) return false;
+  if (!equal(prevProps.attachments, nextProps.attachments)) return false;
+  return true;
+});
 
 function PureAttachmentsButton({
   fileInputRef,

@@ -10,10 +10,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Info, X } from 'lucide-react';
+import { Info, X, RefreshCw } from 'lucide-react';
 import { FilePdf, FileText as PhosphorFileText, Image, File as PhosphorFile, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { useEffect, useState, useCallback } from 'react';
 import * as Collapsible from '@radix-ui/react-collapsible';
+import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
+import { cn } from '@/lib/utils';
 
 interface DocumentFile {
   id?: string; // Message ID for the system message
@@ -29,7 +31,7 @@ interface DocumentFile {
 
 interface SystemPromptDialogProps {
   chatId: string;
-  isProcessingMessage?: boolean;
+  isProcessingFile?: boolean;
 }
 
 interface CollapsibleFileContentProps {
@@ -146,13 +148,14 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
   );
 }
 
-export function SystemPromptDialog({ chatId, isProcessingMessage = false }: SystemPromptDialogProps) {
+export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemPromptDialogProps) {
   const [files, setFiles] = useState<DocumentFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitialPolling, setIsInitialPolling] = useState(false);
   const [hasStartedPolling, setHasStartedPolling] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const parseSystemMessage = (message: { id: string; content: string; role: string }): DocumentFile | null => {
     if (!message?.content || typeof message.content !== 'string' || 
@@ -250,6 +253,75 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
     }
   }, [chatId]);
 
+  const handleRefresh = useCallback(async () => {
+    if (!chatId || isRefreshing) return;
+
+    console.log('[SystemPromptDialog] Starting refresh:', {
+      chatId,
+      timestamp: new Date().toISOString()
+    });
+
+    setIsRefreshing(true);
+    setError(null);
+
+    try {
+      // Start processing
+      console.log('[SystemPromptDialog] Marking file upload started');
+      markFileUploadStarted(chatId);
+      
+      // Set up SSE connection
+      console.log('[SystemPromptDialog] Setting up SSE connection for refresh');
+      const eventSource = new EventSource(`/api/chat/stream?chatId=${chatId}`);
+      
+      let isComplete = false;
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('[SystemPromptDialog] Received refresh message:', {
+            type: data.type,
+            timestamp: new Date().toISOString()
+          });
+          
+          if (data.type === 'document-context-update-complete') {
+            console.log('[SystemPromptDialog] Document context update complete');
+            isComplete = true;
+            markFileUploadComplete(chatId);
+            eventSource.close();
+            fetchSystemContent().finally(() => setIsRefreshing(false));
+          }
+        } catch (error) {
+          console.error('[SystemPromptDialog] Error handling refresh message:', error);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('[SystemPromptDialog] Refresh SSE error:', error);
+        if (!isComplete) {
+          console.log('[SystemPromptDialog] Closing connection due to error');
+          markFileUploadComplete(chatId);
+          eventSource.close();
+          fetchSystemContent().finally(() => setIsRefreshing(false));
+        }
+      };
+
+      // Fallback timeout
+      setTimeout(() => {
+        if (!isComplete) {
+          console.log('[SystemPromptDialog] Refresh timeout reached');
+          markFileUploadComplete(chatId);
+          eventSource.close();
+          fetchSystemContent().finally(() => setIsRefreshing(false));
+        }
+      }, 10000);
+
+    } catch (error) {
+      console.error('[SystemPromptDialog] Error during refresh:', error);
+      setError('Failed to refresh documents');
+      setIsRefreshing(false);
+    }
+  }, [chatId, isRefreshing, fetchSystemContent]);
+
   // Initial fetch without polling
   useEffect(() => {
     console.log('Initial fetch for chat:', chatId);
@@ -258,17 +330,17 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
 
   // Polling effect for document processing
   useEffect(() => {
-    console.log('Polling effect triggered:', { isProcessingMessage, hasStartedPolling, chatId });
+    console.log('Polling effect triggered:', { isProcessingFile, hasStartedPolling, chatId });
     
-    // Only start polling when a message is being processed and we haven't started polling yet
-    if (!isProcessingMessage || hasStartedPolling) {
-      console.log('Skipping polling:', { isProcessingMessage, hasStartedPolling });
+    // Only start polling when a file is being processed and we haven't started polling yet
+    if (!isProcessingFile || hasStartedPolling) {
+      console.log('Skipping polling:', { isProcessingFile, hasStartedPolling });
       return;
     }
 
     let pollCount = 0;
-    const maxPolls = 20; // Increased max polls
-    const pollInterval = 500; // Decreased interval to 500ms
+    const maxPolls = 20;
+    const pollInterval = 500;
     let pollTimer: NodeJS.Timeout | null = null;
 
     async function pollForDocuments() {
@@ -299,72 +371,16 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
       }
       setIsInitialPolling(false);
     };
-  }, [fetchSystemContent, isProcessingMessage, hasStartedPolling, chatId]);
+  }, [fetchSystemContent, isProcessingFile, hasStartedPolling, chatId]);
 
   // Reset polling state when chat ID changes or processing stops
   useEffect(() => {
-    console.log('Resetting polling state:', { chatId, isProcessingMessage });
-    if (!isProcessingMessage) {
+    console.log('Resetting polling state:', { chatId, isProcessingFile });
+    if (!isProcessingFile) {
       setHasStartedPolling(false);
       setIsInitialPolling(false);
     }
-  }, [chatId, isProcessingMessage]);
-
-  // Subscribe to SSE updates for subsequent changes
-  useEffect(() => {
-    if (!chatId || isInitialPolling) return; // Don't set up SSE while polling
-
-    let eventSource: EventSource | null = null;
-    let retryCount = 0;
-    const maxRetries = 3;
-    const retryDelay = 1000; // 1 second
-
-    function setupEventSource() {
-      if (eventSource) {
-        eventSource.close();
-      }
-
-      eventSource = new EventSource(`/api/chat/stream?chatId=${chatId}`);
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'document-context-update') {
-            console.log('Received document context update, fetching new content...');
-            setIsLoading(true);
-            fetchSystemContent().finally(() => setIsLoading(false));
-          }
-        } catch (error) {
-          console.error('Error parsing SSE message:', error);
-        }
-      };
-
-      eventSource.onerror = (error) => {
-        console.error('SSE connection error:', error);
-        eventSource?.close();
-        
-        if (retryCount < maxRetries) {
-          retryCount++;
-          console.log(`Retrying SSE connection (${retryCount}/${maxRetries})...`);
-          setTimeout(setupEventSource, retryDelay * retryCount);
-        }
-      };
-
-      eventSource.onopen = () => {
-        console.log('SSE connection opened');
-        retryCount = 0; // Reset retry count on successful connection
-      };
-    }
-
-    setupEventSource();
-
-    return () => {
-      if (eventSource) {
-        console.log('Closing SSE connection');
-        eventSource.close();
-      }
-    };
-  }, [chatId, fetchSystemContent, isInitialPolling]);
+  }, [chatId, isProcessingFile]);
 
   const removeFile = async (file: DocumentFile) => {
     if (!file.id) {
@@ -416,26 +432,50 @@ export function SystemPromptDialog({ chatId, isProcessingMessage = false }: Syst
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl [&>button]:hidden">
+        <div className="absolute right-4 top-4 flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={isRefreshing || isInitialPolling}
+            className="shrink-0"
+          >
+            <RefreshCw className={cn("size-4", { "animate-spin": isRefreshing })} />
+            <span className="sr-only">Refresh document context</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setIsOpen(false)}
+            className="shrink-0"
+          >
+            <X className="size-4" />
+            <span className="sr-only">Close</span>
+          </Button>
+        </div>
         <DialogHeader>
-          <DialogTitle>Document Context</DialogTitle>
-          <DialogDescription>
-            {isInitialPolling 
-              ? "Processing documents..."
-              : files.length > 0 
-                ? `${files.length} document${files.length === 1 ? '' : 's'} in the current context`
-                : "No documents have been added to the context yet. Upload files to add them to the conversation."}
-          </DialogDescription>
+          <div>
+            <DialogTitle>Document Context</DialogTitle>
+            <DialogDescription>
+              {isInitialPolling 
+                ? "Processing documents..."
+                : files.length > 0 
+                  ? `${files.length} document${files.length === 1 ? '' : 's'} in the current context`
+                  : "No documents have been added to the context yet. Upload files to add them to the conversation."}
+            </DialogDescription>
+          </div>
         </DialogHeader>
+
         <ScrollArea className="h-[400px] rounded-md border">
           {error ? (
             <div className="flex items-center justify-center h-full text-destructive">
               <p>{error}</p>
             </div>
-          ) : isLoading || isInitialPolling ? (
+          ) : isLoading || isInitialPolling || isRefreshing ? (
             <div className="flex items-center justify-center h-full">
               <span className="text-muted-foreground">
-                {isInitialPolling ? "Processing documents..." : "Updating documents..."}
+                {isInitialPolling ? "Processing documents..." : isRefreshing ? "Refreshing documents..." : "Updating documents..."}
               </span>
             </div>
           ) : files.length === 0 ? (
