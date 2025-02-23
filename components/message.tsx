@@ -20,6 +20,7 @@ import { MessageReasoning } from "./message-reasoning";
 import { debug } from "@/lib/utils/debug";
 import { useBlock } from "@/hooks/use-block";
 import type { UIBlock, BlockKind } from "./block";
+import { PreviewAttachment } from './preview-attachment';
 
 interface DocumentToolInvocation {
   toolName: string;
@@ -106,7 +107,7 @@ const PurePreviewMessage = ({
   ) => Promise<string | null | undefined>;
   isReadonly: boolean;
 }) => {
-  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [mode, setMode] = useState<'view' | 'edit'>('view');
   const { block, setBlock } = useBlock();
   const [isDocumentInitialized, setIsDocumentInitialized] = useState(false);
   const originalMessageId = useRef(message.id);
@@ -195,14 +196,7 @@ const PurePreviewMessage = ({
     });
   }, [messageWithStableId, isLoading]);
 
-  // Check if there's no content to display
-  if (!messageWithStableId.content && !messageWithStableId.toolInvocations?.length) {
-    // No textual content but no other reason to render? Possibly show no UI.
-    return null;
-  }
-
-  // Skip rendering if this is a document creation message
-  if (documentToolInvocation) {
+  if (!messageWithStableId.content && messageWithStableId.role === 'assistant' && !isLoading) {
     return null;
   }
 
@@ -217,14 +211,14 @@ const PurePreviewMessage = ({
       >
         <div
           className={cn(
-            "flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl",
+            'flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl',
             {
-              "w-full": mode === "edit",
-              "group-data-[role=user]/message:w-fit": mode !== "edit"
-            }
+              'w-full': mode === 'edit',
+              'group-data-[role=user]/message:w-fit': mode !== 'edit',
+            },
           )}
         >
-          {messageWithStableId.role === "assistant" && (
+          {messageWithStableId.role === 'assistant' && (
             <div className="size-8 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border bg-background">
               <div className="translate-y-px">
                 <SparklesIcon size={14} />
@@ -233,30 +227,34 @@ const PurePreviewMessage = ({
           )}
 
           <div className="flex flex-col gap-4 w-full">
-            {messageWithStableId.reasoning && (
-              <MessageReasoning isLoading={isLoading} reasoning={messageWithStableId.reasoning} />
+            {messageWithStableId.experimental_attachments && (
+              <div className="flex flex-row justify-end gap-2">
+                {messageWithStableId.experimental_attachments.map((attachment) => (
+                  <PreviewAttachment
+                    key={attachment.url}
+                    attachment={attachment}
+                  />
+                ))}
+              </div>
             )}
 
-            {/* Handle document creation tool invocation */}
-            {documentToolInvocation && documentPreviewResult && (
-              <DocumentPreview
-                isReadonly={isReadonly}
-                result={documentPreviewResult}
-                isCompact={block.isVisible}
+            {messageWithStableId.reasoning && (
+              <MessageReasoning
+                isLoading={isLoading}
+                reasoning={messageWithStableId.reasoning}
               />
             )}
 
-            {/* Only show content if not a document creation message */}
-            {!documentToolInvocation && messageWithStableId.content && mode === "view" && (
+            {(messageWithStableId.content || messageWithStableId.reasoning) && mode === 'view' && (
               <div className="flex flex-row gap-2 items-start">
-                {messageWithStableId.role === "user" && !isReadonly && (
+                {messageWithStableId.role === 'user' && !isReadonly && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         className="px-2 h-fit rounded-full text-muted-foreground opacity-0 group-hover/message:opacity-100"
                         onClick={() => {
-                          setMode("edit");
+                          setMode('edit');
                         }}
                       >
                         <PencilEditIcon />
@@ -267,47 +265,23 @@ const PurePreviewMessage = ({
                 )}
 
                 <div
-                  className={cn("flex flex-col gap-0", {
-                    "bg-primary text-primary-foreground dark:bg-primary dark:text-primary-foreground px-4 py-2.5 rounded-[var(--radius-lg)] [&_p]:!m-0 [&_*]:!text-primary-foreground dark:[&_*]:!text-primary-foreground":
-                      messageWithStableId.role === "user"
+                  className={cn('flex flex-col gap-4', {
+                    'bg-primary text-primary-foreground px-3 py-2 rounded-xl [&_.prose]:text-primary-foreground [&_.prose_*]:text-primary-foreground':
+                      messageWithStableId.role === 'user',
                   })}
                 >
-                  <div className="!mb-0">
-                    <Markdown className="[&_*]:!text-inherit [&_p]:!m-0 [&>*:last-child]:!mb-0 [&>*:first-child]:!mt-0">
-                      {(() => {
-                        const content = messageWithStableId.content;
-                        
-                        // If content is already a string, try to parse it as JSON
-                        if (typeof content === 'string') {
-                          try {
-                            const parsed = JSON.parse(content);
-                            return extractTextFromContent(parsed);
-                          } catch {
-                            return content;
-                          }
-                        }
-                        
-                        // If content is an object, try to extract text directly
-                        if (typeof content === 'object' && content !== null) {
-                          return extractTextFromContent(content);
-                        }
-                        
-                        // Fallback to string conversion
-                        return String(content || '');
-                      })()}
-                    </Markdown>
-                  </div>
+                  <Markdown>{messageWithStableId.content as string}</Markdown>
                 </div>
               </div>
             )}
 
-            {messageWithStableId.content && mode === "edit" && (
+            {messageWithStableId.content && mode === 'edit' && (
               <div className="flex flex-row gap-2 items-start">
                 <div className="size-8" />
 
                 <MessageEditor
                   key={messageWithStableId.id}
-                  message={messageWithStableId}
+                  message={{ ...messageWithStableId, chatId }}
                   setMode={setMode}
                   setMessages={setMessages}
                   reload={reload}
@@ -315,62 +289,70 @@ const PurePreviewMessage = ({
               </div>
             )}
 
-            {/* Handle other tool invocations */}
-            {(messageWithStableId.toolInvocations || [])
-              .filter((t) => t.toolName !== "createDocument")
-              .map((toolInvocation) => {
-                const { toolName, toolCallId, state, args } = toolInvocation;
+            {messageWithStableId.toolInvocations && messageWithStableId.toolInvocations.length > 0 && (
+              <div className="flex flex-col gap-4">
+                {messageWithStableId.toolInvocations.map((toolInvocation) => {
+                  const { toolName, toolCallId, state, args } = toolInvocation;
 
-                if (state === "result") {
-                  const { result } = toolInvocation;
+                  if (state === 'result') {
+                    const { result } = toolInvocation;
 
+                    return (
+                      <div key={toolCallId}>
+                        {toolName === 'getWeather' ? (
+                          <Weather weatherAtLocation={result} />
+                        ) : toolName === 'createDocument' ? (
+                          <DocumentPreview
+                            isReadonly={isReadonly}
+                            result={result}
+                          />
+                        ) : toolName === 'updateDocument' ? (
+                          <DocumentToolResult
+                            type="update"
+                            result={result}
+                            isReadonly={isReadonly}
+                          />
+                        ) : toolName === 'requestSuggestions' ? (
+                          <DocumentToolResult
+                            type="request-suggestions"
+                            result={result}
+                            isReadonly={isReadonly}
+                          />
+                        ) : (
+                          <pre>{JSON.stringify(result, null, 2)}</pre>
+                        )}
+                      </div>
+                    );
+                  }
                   return (
-                    <div key={toolCallId}>
-                      {toolName === "getWeather" ? (
-                        <Weather weatherAtLocation={result} />
-                      ) : toolName === "updateDocument" ? (
-                        <DocumentToolResult
+                    <div
+                      key={toolCallId}
+                      className={cx({
+                        skeleton: ['getWeather'].includes(toolName),
+                      })}
+                    >
+                      {toolName === 'getWeather' ? (
+                        <Weather />
+                      ) : toolName === 'createDocument' ? (
+                        <DocumentPreview isReadonly={isReadonly} args={args} />
+                      ) : toolName === 'updateDocument' ? (
+                        <DocumentToolCall
                           type="update"
-                          result={result}
+                          args={args}
                           isReadonly={isReadonly}
                         />
-                      ) : toolName === "requestSuggestions" ? (
-                        <DocumentToolResult
+                      ) : toolName === 'requestSuggestions' ? (
+                        <DocumentToolCall
                           type="request-suggestions"
-                          result={result}
+                          args={args}
                           isReadonly={isReadonly}
                         />
-                      ) : (
-                        <pre>{JSON.stringify(result, null, 2)}</pre>
-                      )}
+                      ) : null}
                     </div>
                   );
-                }
-                return (
-                  <div
-                    key={toolCallId}
-                    className={cx({
-                      skeleton: ["getWeather"].includes(toolName)
-                    })}
-                  >
-                    {toolName === "getWeather" ? (
-                      <Weather />
-                    ) : toolName === "updateDocument" ? (
-                      <DocumentToolCall
-                        type="update"
-                        args={args}
-                        isReadonly={isReadonly}
-                      />
-                    ) : toolName === "requestSuggestions" ? (
-                      <DocumentToolCall
-                        type="request-suggestions"
-                        args={args}
-                        isReadonly={isReadonly}
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
+                })}
+              </div>
+            )}
 
             {!isReadonly && (
               <MessageActions

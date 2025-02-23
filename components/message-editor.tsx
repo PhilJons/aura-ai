@@ -46,16 +46,20 @@ export function MessageEditor({
 
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      adjustHeight();
     }
-  }, [draftContent]);
+  }, []);
 
   const adjustHeight = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight + 2}px`;
     }
+  };
+
+  const handleInput = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setDraftContent(event.target.value);
+    adjustHeight();
   };
 
   const handleSubmit = async () => {
@@ -123,31 +127,21 @@ export function MessageEditor({
     <div className="flex flex-col gap-2 w-full">
       <Textarea
         ref={textareaRef}
+        className="bg-transparent outline-none overflow-hidden resize-none !text-base rounded-xl w-full"
         value={draftContent}
-        onChange={(event) => {
-          setDraftContent(event.target.value);
-          adjustHeight();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault();
-            handleSubmit();
-          }
-        }}
-        className="resize-none"
-        disabled={isSubmitting}
+        onChange={handleInput}
       />
 
       <div className="flex flex-row gap-2 justify-end">
         <Button
           variant="outline"
           className="h-fit py-2 px-3"
-          disabled={isSubmitting}
-          onClick={() => setMode('view')}
+          onClick={() => {
+            setMode('view');
+          }}
         >
           Cancel
         </Button>
-
         <Button
           variant="default"
           className="h-fit py-2 px-3"

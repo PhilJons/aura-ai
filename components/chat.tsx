@@ -2,16 +2,18 @@
 
 import type { Attachment, Message } from 'ai';
 import { useChat } from 'ai/react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
-import { debug } from '@/lib/utils/debug';
 
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
-import { fetcher, } from '@/lib/utils';
+import { fetcher, generateUUID } from '@/lib/utils';
+
+import { Block } from './block';
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
 import type { VisibilityType } from './visibility-selector';
+import { useBlockSelector } from '@/hooks/use-block';
 import { toast } from 'sonner';
 
 export function Chat({
@@ -29,13 +31,6 @@ export function Chat({
 }) {
   const { mutate } = useSWRConfig();
 
-  debug('message', 'Chat initialization source', {
-    chatId: id,
-    isNewChat: initialMessages.length === 0,
-    initialMessageCount: initialMessages.length,
-    isPageReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
-  });
-
   const {
     messages,
     setMessages,
@@ -49,109 +44,19 @@ export function Chat({
   } = useChat({
     id,
     body: { id, selectedChatModel: selectedChatModel },
-    initialMessages: initialMessages.map(msg => {
-      debug('message', 'Raw initial message', {
-        messageId: msg.id,
-        role: msg.role,
-        content: msg.content,
-        hasToolInvocations: !!msg.toolInvocations?.length,
-        toolInvocations: msg.toolInvocations
-      });
-
-      let parsedContent: any;
-      try {
-        parsedContent = Array.isArray(msg.content) ? msg.content[0] : JSON.parse(msg.content);
-        debug('message', 'Parsed initial message content', {
-          messageId: msg.id,
-          role: msg.role,
-          contentType: parsedContent.type,
-          hasToolCall: parsedContent.type === 'tool-call',
-          hasToolResult: parsedContent.type === 'tool-result',
-          toolName: parsedContent.toolName
-        });
-      } catch (error) {
-        debug('message', 'Initial message is plain text', {
-          messageId: msg.id,
-          role: msg.role,
-          contentPreview: `${msg.content.substring(0, 100)}...`
-        });
-      }
-      return { ...msg, chatId: id };
-    }),
-    onResponse: (response) => {
-      // This is called when the response starts streaming
-      debug('message', 'Response started streaming', {
-        chatId: id,
-        status: response.status,
-        ok: response.ok
-      });
-    },
+    initialMessages,
+    experimental_throttle: 100,
+    sendExtraMessageFields: true,
+    generateId: generateUUID,
     onFinish: () => {
-      debug('message', 'Chat finished', {
-        messageCount: messages.length,
-        lastMessage: messages[messages.length - 1],
-        toolInvocations: messages
-          .flatMap(m => m.toolInvocations || [])
-          .map(t => ({
-            state: t.state,
-            toolName: t.toolName
-          }))
-      });
-
-      // First mutate history to ensure sidebar is updated
       mutate('/api/history');
-      
-      // Then refresh messages with proper error handling and retries
-      const refreshMessages = async () => {
-        try {
-          const response = await fetch(`/api/chat/message?chatId=${id}`);
-          if (!response.ok) {
-            throw new Error(`Failed to fetch messages: ${response.status}`);
-          }
-          const updatedMessages = await response.json();
-          
-          if (updatedMessages && Array.isArray(updatedMessages)) {
-            setMessages(updatedMessages.map(msg => ({ ...msg, chatId: id })));
-          }
-        } catch (error) {
-          console.error('Error refreshing messages:', error);
-          // Retry once after a short delay
-          setTimeout(async () => {
-            try {
-              const retryResponse = await fetch(`/api/chat/message?chatId=${id}`);
-              const retryMessages = await retryResponse.json();
-              if (retryMessages && Array.isArray(retryMessages)) {
-                setMessages(retryMessages.map(msg => ({ ...msg, chatId: id })));
-              }
-            } catch (retryError) {
-              console.error('Error retrying message refresh:', retryError);
-              toast.error('Failed to sync messages');
-            }
-          }, 1000);
-        }
-      };
-
-      refreshMessages();
     },
     onError: (error) => {
-      console.error('[Chat] Error occurred:', error);
-      toast.error('An error occurred, please try again!');
+      if (error.message && !error.message.includes('message channel closed')) {
+        toast.error('An error occurred, please try again!');
+      }
     },
   });
-
-  const messagesWithChatId = messages.map(msg => ({ ...msg, chatId: id }));
-
-  useEffect(() => {
-    debug('message', 'Messages updated', {
-      messageCount: messages.length,
-      messages: messages.map(m => ({
-        id: m.id,
-        role: m.role,
-        hasToolInvocations: !!m.toolInvocations?.length,
-        toolInvocationStates: m.toolInvocations?.map(t => t.state)
-      }))
-    });
-  }, [messages]);
 
   const { data: votes } = useSWR<Array<Vote>>(
     `/api/vote?chatId=${id}`,

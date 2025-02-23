@@ -2,8 +2,7 @@
 import {
   memo,
 } from 'react';
-import { imageBlock } from '@/blocks/image/client';
-import { codeBlock } from '@/blocks/code/client';
+§ import { codeBlock } from '@/blocks/code/client';
 import { sheetBlock } from '@/blocks/sheet/client';
 import { textBlock } from '@/blocks/text/client';
 

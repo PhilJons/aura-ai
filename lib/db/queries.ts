@@ -90,7 +90,6 @@ export async function getChatById({ id }: { id: string }): Promise<Chat | undefi
 }
 
 export async function saveMessages({ messages }: { messages: Array<Message> }): Promise<Message[]> {
-  console.log('Saving messages:', messages);
   const savedMessages: Message[] = [];
   for (const msg of messages) {
     const message: Message = {
@@ -99,7 +98,6 @@ export async function saveMessages({ messages }: { messages: Array<Message> }): 
       createdAt: new Date().toISOString()
     };
     const { resource } = await containers.messages.items.upsert(message);
-    console.log('Saved message result:', resource);
     if (resource) {
       savedMessages.push({ ...message, ...resource as unknown as Partial<Message> });
     } else {
@@ -110,14 +108,11 @@ export async function saveMessages({ messages }: { messages: Array<Message> }): 
 }
 
 export async function getMessagesByChatId({ id }: { id: string }): Promise<Message[]> {
-  console.log('Getting messages for chat:', id);
   const querySpec = {
     query: 'SELECT * FROM c WHERE c.chatId = @chatId AND c.type = "message" ORDER BY c.createdAt ASC',
     parameters: [{ name: '@chatId', value: id }]
   };
-  console.log('Query spec:', querySpec);
   const { resources } = await containers.messages.items.query(querySpec).fetchAll();
-  console.log('Retrieved messages:', resources);
   return resources as Message[];
 }
 
@@ -296,8 +291,12 @@ export async function getSuggestionsByDocumentId({
 }
 
 export async function getMessageById({ id }: { id: string }): Promise<Message | undefined> {
-  const { resource } = await containers.messages.item(id, id).read();
-  return resource as Message | undefined;
+  const querySpec = {
+    query: 'SELECT * FROM c WHERE c.id = @id AND c.type = "message"',
+    parameters: [{ name: '@id', value: id }]
+  };
+  const { resources } = await containers.messages.items.query(querySpec).fetchAll();
+  return resources[0] as Message | undefined;
 }
 
 export async function deleteMessagesByChatIdAfterTimestamp({
@@ -306,35 +305,18 @@ export async function deleteMessagesByChatIdAfterTimestamp({
 }: {
   chatId: string;
   timestamp: Date;
-}) {
-  const timestampStr = timestamp.toISOString();
-
-  // Get messages to delete
-  const messageQuerySpec = {
-    query: 'SELECT * FROM c WHERE c.chatId = @chatId AND c.createdAt >= @timestamp',
+}): Promise<void> {
+  const querySpec = {
+    query: 'SELECT * FROM c WHERE c.chatId = @chatId AND c.type = "message" AND c.createdAt > @timestamp',
     parameters: [
       { name: '@chatId', value: chatId },
-      { name: '@timestamp', value: timestampStr }
+      { name: '@timestamp', value: timestamp.toISOString() }
     ]
   };
-  const { resources: messages } = await containers.messages.items.query(messageQuerySpec).fetchAll();
+  const { resources } = await containers.messages.items.query(querySpec).fetchAll();
   
-  // Delete votes for these messages
-  for (const msg of messages) {
-    const voteQuerySpec = {
-      query: 'SELECT * FROM c WHERE c.chatId = @chatId AND c.messageId = @messageId',
-      parameters: [
-        { name: '@chatId', value: chatId },
-        { name: '@messageId', value: msg.id }
-      ]
-    };
-    const { resources: votes } = await containers.votes.items.query(voteQuerySpec).fetchAll();
-    for (const vote of votes) {
-      await containers.votes.item(vote.id, vote.chatId).delete();
-    }
-    
-    // Delete the message
-    await containers.messages.item(msg.id, msg.chatId).delete();
+  for (const message of resources) {
+    await containers.messages.item(message.id, message.chatId).delete();
   }
 }
 

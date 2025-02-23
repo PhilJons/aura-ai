@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 
 import {
   deleteMessagesByChatIdAfterTimestamp,
+  getMessageById,
   updateChatVisiblityById,
 } from '@/lib/db/queries';
 import type { VisibilityType } from '@/components/visibility-selector';
@@ -39,36 +40,16 @@ export async function generateTitleFromUserMessage({
 }
 
 export async function deleteTrailingMessages({ id }: { id: string }) {
-  try {
-    // Query for the message with both id and type
-    const querySpec = {
-      query: 'SELECT * FROM c WHERE c.id = @id AND c.type = "message"',
-      parameters: [{ name: '@id', value: id }]
-    };
-    
-    console.log('Looking up message with query:', querySpec);
-    const { resources } = await containers.messages.items.query(querySpec).fetchAll();
-    const message = resources[0];
-    
-    if (!message) {
-      console.error(`Message not found with id: ${id}`);
-      throw new Error(`Message not found with id: ${id}`);
-    }
-
-    console.log('Found message:', message);
-    console.log('Deleting messages after timestamp:', message.createdAt);
-
-    // Delete messages after this one
-    await deleteMessagesByChatIdAfterTimestamp({
-      chatId: message.chatId,
-      timestamp: new Date(message.createdAt),
-    });
-
-    return message;
-  } catch (error) {
-    console.error('Error in deleteTrailingMessages:', error);
-    throw error;
+  const message = await getMessageById({ id });
+  
+  if (!message) {
+    throw new Error('Message not found');
   }
+
+  await deleteMessagesByChatIdAfterTimestamp({
+    chatId: message.chatId,
+    timestamp: new Date(message.createdAt),
+  });
 }
 
 export async function updateChatVisibility({
@@ -87,45 +68,42 @@ export async function clearChatCookies() {
   // Add any other chat-related cookies that need to be cleared
 }
 
-export async function updateMessage({
-  id,
-  content,
-}: {
-  id: string;
-  content: string;
-}) {
+export async function updateMessage({ id, content }: { id: string; content: string }) {
   try {
-    // Query for the message with both id and type
-    const querySpec = {
-      query: 'SELECT * FROM c WHERE c.id = @id AND c.type = "message"',
-      parameters: [{ name: '@id', value: id }]
-    };
-    
-    const { resources } = await containers.messages.items.query(querySpec).fetchAll();
-    const message = resources[0];
+    const message = await getMessageById({ id });
     
     if (!message) {
-      throw new Error(`Message not found with id: ${id}`);
+      throw new Error('Message not found');
     }
 
-    // Update the message
-    const { resource: updatedMessage } = await containers.messages
-      .item(message.id, message.id)
-      .replace({
-        ...message,
-        content,
-        updatedAt: new Date().toISOString()
-      });
-
-    // Delete messages after this one
-    await deleteMessagesByChatIdAfterTimestamp({
+    // Preserve the original message structure
+    const updatedMessage = {
+      id: message.id,
       chatId: message.chatId,
-      timestamp: new Date(message.createdAt),
-    });
+      role: message.role,
+      content,
+      createdAt: message.createdAt,
+      type: 'message' as const
+    };
 
-    return updatedMessage;
+    try {
+      // Use chatId as partition key
+      const { resource } = await containers.messages.items.upsert(updatedMessage);
+      
+      if (!resource) {
+        throw new Error('Failed to update message');
+      }
+
+      // Delete all messages that came after this one
+      await deleteTrailingMessages({ id });
+
+      return resource;
+    } catch (error) {
+      console.error('Error updating message in database:', error);
+      throw new Error('Failed to update message in database');
+    }
   } catch (error) {
     console.error('Error in updateMessage:', error);
-    throw error;
+    throw error; // Re-throw to handle in the UI
   }
 }
