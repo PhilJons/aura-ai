@@ -1,6 +1,4 @@
 "use client";
-
-import { notFound } from "next/navigation";
 import React from "react";
 import { debug } from "@/lib/utils/debug";
 import { useSessionWithUser } from "@/lib/hooks/use-session-with-user";

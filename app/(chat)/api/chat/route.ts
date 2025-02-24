@@ -19,15 +19,13 @@ import {
   generateUUID,
   getMostRecentUserMessage,
   sanitizeResponseMessages,
-  convertToUIMessages,
 } from '@/lib/utils';
 import { emitDocumentContextUpdate } from '@/lib/utils/stream';
 import { generateTitleFromUserMessage } from '@/app/(chat)/actions';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { getEncoding } from 'js-tiktoken';
-import { processDocument, type ProcessedDocument } from '@/lib/azure/document';
-import { getToken } from 'next-auth/jwt';
+import { processDocument, } from '@/lib/azure/document';
 
 // Maximum tokens we want to allow for the context (8k for GPT-4)
 const MAX_CONTEXT_TOKENS = 8000;

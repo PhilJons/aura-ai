@@ -69,7 +69,7 @@ function sendHeartbeat(chatId: string) {
   }
 }
 
-export async function emitDocumentContextUpdate(chatId: string, hasImages: boolean = false) {
+export async function emitDocumentContextUpdate(chatId: string, hasImages = false) {
   const controllers = streamControllers.get(chatId);
   if (!controllers || controllers.size === 0) {
     console.log(`No active connections found for chat ${chatId}`);

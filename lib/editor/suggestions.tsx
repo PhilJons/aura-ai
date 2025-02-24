@@ -69,7 +69,7 @@ export function projectWithPositions(
 export function createSuggestionWidget(
   suggestion: UISuggestion,
   view: EditorView,
-  kind: string = 'text',
+  kind = 'text',
 ): { dom: HTMLElement; destroy: () => void } {
   const dom = document.createElement('span');
   const root = createRoot(dom);

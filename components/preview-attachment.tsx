@@ -5,8 +5,6 @@ import { motion } from "framer-motion";
 import Image from 'next/image';
 import { cn } from "@/lib/utils";
 import { File, FilePdf, FileText, X, Spinner } from "@phosphor-icons/react";
-
-import { LoaderIcon, CrossSmallIcon } from "./icons";
 import { Button } from "./ui/button";
 import { ImageOverlay } from "./image-overlay";
 import { PdfOverlay } from "./pdf-overlay";

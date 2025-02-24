@@ -17,7 +17,6 @@ import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
 import type { VisibilityType } from './visibility-selector';
 import { toast } from 'sonner';
-import { notFound } from 'next/navigation';
 
 export function Chat({
   id,

@@ -1,25 +1,7 @@
 "use server";
-
-/*
-<ai_context>
-Client: This route handles file uploads and stores them in Azure Blob Storage.
-We are modifying it to handle PDF in a two-step approach:
-1) Upload the raw PDF as application/pdf
-2) If PDF, call processDocument for text extraction, store that as application/json
-Then return both attachments in the response.
-
-We also keep existing logic for other file types.
-</ai_context>
-*/
-
-import { NextResponse } from "next/server";
 import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
 
 import { auth } from "@/app/(auth)/auth";
-import { uploadBlob } from "@/lib/azure/blob";
-import { processDocument } from "@/lib/azure/document";
-import { logger } from "@/lib/utils/logger";
 import { uploadFile } from '@/lib/utils/upload';
 import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
 

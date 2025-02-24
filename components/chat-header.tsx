@@ -1,7 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useWindowSize } from 'usehooks-ts';
-import { useEffect, useCallback } from 'react';
+import { useEffect, } from 'react';
 
 import { ModelSelector } from '@/components/model-selector';
 import { SidebarToggle } from '@/components/sidebar-toggle';

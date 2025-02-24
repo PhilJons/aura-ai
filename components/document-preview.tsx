@@ -1,8 +1,6 @@
 'use client';
 
 import {
-  memo,
-  type MouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -21,7 +19,6 @@ import { SpreadsheetEditor } from './sheet-editor';
 import { ImageEditor } from './image-editor';
 import { debug } from '@/lib/utils/debug';
 import { toast } from 'sonner';
-import equal from 'fast-deep-equal';
 
 interface DocumentPreviewProps {
   isReadonly: boolean;

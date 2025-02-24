@@ -74,7 +74,7 @@ export async function processDocument(
 
     // Log the first 100 characters of content for debugging
     logger.document.debug("Extracted content preview", {
-      contentPreview: content.substring(0, 100) + "...",
+      contentPreview: `${content.substring(0, 100)}...`,
       totalLength: content.length
     });
 

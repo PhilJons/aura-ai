@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { processDocument } from '@/lib/azure/document';
+import { processDocument, type ProcessedDocument } from '@/lib/azure/document';
 import { uploadBlob } from '@/lib/azure/blob';
 
 export async function uploadFile(file: File) {
@@ -40,7 +40,7 @@ export async function uploadFile(file: File) {
   // Process PDFs and text files
   if (rawMimeType === 'application/pdf' || rawMimeType === 'text/plain') {
     try {
-      let processed;
+      let processed: ProcessedDocument;
       if (rawMimeType === 'text/plain') {
         // For text files, simply read the content
         processed = {
