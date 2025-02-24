@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { useLocalStorage, useWindowSize } from "usehooks-ts";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePathname } from 'next/navigation';
 
 import { sanitizeUIMessages } from "@/lib/utils";
 import equal from "fast-deep-equal";
@@ -118,6 +119,7 @@ interface MultimodalInputProps {
   className?: string;
   selectedChatModel: string;
   setIsProcessingFile: Dispatch<SetStateAction<boolean>>;
+  isExistingChat?: boolean;
 }
 
 function validateFileType(file: File, selectedChatModel: string) {
@@ -153,10 +155,13 @@ function PureMultimodalInput({
   className,
   selectedChatModel,
   setIsProcessingFile,
+  isExistingChat = false,
 }: MultimodalInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
   const [textareaHeight, setTextareaHeight] = useState(40);
+  const pathname = usePathname();
+  const isRootPath = pathname === '/';
 
   const [localStorageInput, setLocalStorageInput] = useLocalStorage("input", "");
   const [localStorageAttachments, setLocalStorageAttachments] = useLocalStorage<Array<CustomAttachment>>(
@@ -359,7 +364,9 @@ function PureMultimodalInput({
     <div className="relative w-full flex flex-col gap-4">
       {messages.length === 0 &&
         attachments.length === 0 &&
-        uploadQueue.length === 0 && (
+        uploadQueue.length === 0 &&
+        !isLoading &&
+        isRootPath && (
           <SuggestedActions append={append} chatId={chatId} />
         )}
 
@@ -593,11 +600,12 @@ function PureAttachmentsButton({
     <button
       type="button"
       className={cx(
-        "flex items-center justify-center w-8 h-8 rounded-full",
+        "flex items-center justify-center w-8 h-8 p-0 rounded-full",
         "border border-zinc-200 dark:border-zinc-800",
         "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
         "text-zinc-600 dark:text-zinc-400",
-        "transition-colors duration-200"
+        "transition-colors duration-200",
+        "[&_svg]:size-4 [&_svg]:shrink-0"
       )}
       onClick={(event) => {
         event.preventDefault();
@@ -625,12 +633,14 @@ function PureStopButton({
 }) {
   return (
     <Button
+      size="icon"
       className={cx(
-        "rounded-full w-8 h-8 flex items-center justify-center",
+        "rounded-full w-8 h-8 p-0 flex items-center justify-center",
         "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
         "text-zinc-600 dark:text-zinc-400",
         "border border-zinc-200 dark:border-zinc-800",
-        "transition-colors duration-200"
+        "transition-colors duration-200",
+        "[&_svg]:size-4 [&_svg]:shrink-0"
       )}
       onClick={(event) => {
         event.preventDefault();
@@ -638,7 +648,7 @@ function PureStopButton({
         setMessages((messages) => sanitizeUIMessages(messages));
       }}
     >
-      <StopIcon size={14} />
+      <StopIcon size={16} />
     </Button>
   );
 }
@@ -656,13 +666,15 @@ function PureSendButton({
 }) {
   return (
     <Button
+      size="icon"
       className={cx(
-        "rounded-full w-8 h-8 flex items-center justify-center",
+        "rounded-full w-8 h-8 p-0 flex items-center justify-center",
         "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
         "text-zinc-600 dark:text-zinc-400",
         "border border-zinc-200 dark:border-zinc-800",
         "transition-colors duration-200",
-        "disabled:opacity-40 disabled:hover:bg-background dark:disabled:hover:bg-zinc-900"
+        "disabled:opacity-40 disabled:hover:bg-background dark:disabled:hover:bg-zinc-900",
+        "[&_svg]:size-4 [&_svg]:shrink-0"
       )}
       onClick={(event) => {
         event.preventDefault();
@@ -670,7 +682,7 @@ function PureSendButton({
       }}
       disabled={input.length === 0 || uploadQueue.length > 0}
     >
-      <ArrowUpIcon size={14} />
+      <ArrowUpIcon size={16} />
     </Button>
   );
 }

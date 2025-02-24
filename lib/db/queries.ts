@@ -16,9 +16,12 @@ export async function getUser(email: string): Promise<User | undefined> {
 export async function createUser(email: string, password?: string): Promise<User> {
   const user: User = {
     id: uuidv4(),
+    type: "user",
     email,
     password,
-    type: 'user'
+    azureSub: '', // Empty string for non-Azure AD users
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
   const { resource } = await containers.users.items.create(user);
   return resource as User;
@@ -35,6 +38,7 @@ export async function saveChat({
   title: string;
   visibility?: 'private' | 'public';
 }): Promise<Chat> {
+  debug('db', 'Creating new chat', { chatId: id, userId, title, visibility });
   const chat: Chat = {
     id,
     createdAt: new Date().toISOString(),
@@ -43,19 +47,22 @@ export async function saveChat({
     visibility,
     type: 'chat'
   };
-  console.log('Saving chat:', chat);
   const { resource } = await containers.chats.items.create(chat);
-  console.log('Saved chat result:', resource);
+  debug('db', 'Chat created successfully', { chatId: id, title });
   return resource as Chat;
 }
 
 export async function deleteChatById({ id }: { id: string }) {
+  debug('db', 'Deleting chat and related data', { chatId: id });
+  
   // Delete votes for this chat
   const voteQuerySpec = {
     query: 'SELECT * FROM c WHERE c.chatId = @chatId',
     parameters: [{ name: '@chatId', value: id }]
   };
   const { resources: votes } = await containers.votes.items.query(voteQuerySpec).fetchAll();
+  debug('db', 'Found votes to delete', { chatId: id, count: votes.length });
+  
   for (const vote of votes) {
     await containers.votes.item(vote.id, vote.chatId).delete();
   }
@@ -66,12 +73,15 @@ export async function deleteChatById({ id }: { id: string }) {
     parameters: [{ name: '@chatId', value: id }]
   };
   const { resources: messages } = await containers.messages.items.query(messageQuerySpec).fetchAll();
+  debug('db', 'Found messages to delete', { chatId: id, count: messages.length });
+  
   for (const message of messages) {
     await containers.messages.item(message.id, message.chatId).delete();
   }
 
   // Delete the chat itself
   await containers.chats.item(id, id).delete();
+  debug('db', 'Chat and related data deleted successfully', { chatId: id });
 }
 
 export async function getChatsByUserId({ id }: { id: string }): Promise<Chat[]> {
@@ -84,11 +94,14 @@ export async function getChatsByUserId({ id }: { id: string }): Promise<Chat[]> 
 }
 
 export async function getChatById({ id }: { id: string }): Promise<Chat | undefined> {
+  debug('db', 'Looking up chat by ID', { chatId: id });
   const { resource } = await containers.chats.item(id, id).read();
+  debug('db', resource ? 'Chat found' : 'Chat not found', { chatId: id });
   return resource as Chat | undefined;
 }
 
 export async function saveMessages({ messages }: { messages: Array<Message> }): Promise<Message[]> {
+  debug('db', 'Saving messages', { count: messages.length });
   const savedMessages: Message[] = [];
   for (const msg of messages) {
     const message: Message = {
@@ -96,6 +109,11 @@ export async function saveMessages({ messages }: { messages: Array<Message> }): 
       type: 'message',
       createdAt: new Date().toISOString()
     };
+    debug('db', 'Saving individual message', {
+      messageId: message.id,
+      chatId: message.chatId,
+      role: message.role
+    });
     const { resource } = await containers.messages.items.upsert(message);
     if (resource) {
       savedMessages.push({ ...message, ...resource as unknown as Partial<Message> });
@@ -103,15 +121,18 @@ export async function saveMessages({ messages }: { messages: Array<Message> }): 
       savedMessages.push(message);
     }
   }
+  debug('db', 'All messages saved successfully', { count: savedMessages.length });
   return savedMessages;
 }
 
 export async function getMessagesByChatId({ id }: { id: string }): Promise<Message[]> {
+  debug('db', 'Fetching messages for chat', { chatId: id });
   const querySpec = {
     query: 'SELECT * FROM c WHERE c.chatId = @chatId AND c.type = "message" ORDER BY c.createdAt ASC',
     parameters: [{ name: '@chatId', value: id }]
   };
   const { resources } = await containers.messages.items.query(querySpec).fetchAll();
+  debug('db', 'Messages retrieved', { chatId: id, count: resources.length });
   return resources as Message[];
 }
 
@@ -183,7 +204,7 @@ export async function saveDocument({
     });
     return resource ? { ...document, ...resource as Partial<Document> } : document;
   } catch (error) {
-    debugError('document', 'Failed to save document', error);
+    debugError('document', 'Failed to save document', { error: String(error) });
     throw error;
   }
 }
@@ -253,7 +274,7 @@ export async function deleteDocumentsByIdAfterTimestamp({
       deletedSuggestions: suggestions.length
     });
   } catch (error) {
-    debugError('document', 'Failed to delete documents', error);
+    debugError('document', 'Failed to delete documents', { error: String(error) });
     throw error;
   }
 }
@@ -353,33 +374,59 @@ export async function getDocumentsById({ id }: { id: string }): Promise<Document
 
     return resources as Document[];
   } catch (error) {
-    debugError('document', 'Failed to fetch documents', error);
+    debugError('document', 'Failed to fetch documents', { error: String(error) });
     throw error;
   }
 }
 
 export async function getOrCreateUserByAzureSub(azureSub: string, email: string): Promise<User> {
-  // First try to find the user
-  const querySpec = {
+  // First try to find the user by email
+  const emailQuerySpec = {
+    query: "SELECT * FROM c WHERE c.email = @email AND c.type = 'user'",
+    parameters: [
+      { name: "@email", value: email }
+    ]
+  };
+
+  const { resources: emailResults } = await containers.users.items.query(emailQuerySpec).fetchAll();
+  const existingUserByEmail = emailResults[0] as User | undefined;
+
+  if (existingUserByEmail) {
+    // Update the Azure sub if it's different
+    if (existingUserByEmail.azureSub !== azureSub) {
+      const updatedUser: User = {
+        ...existingUserByEmail,
+        azureSub,
+        updatedAt: new Date().toISOString()
+      };
+      const { resource } = await containers.users.item(existingUserByEmail.id, existingUserByEmail.id).replace(updatedUser);
+      return resource as User;
+    }
+    
+    return existingUserByEmail;
+  }
+
+  // If no user found by email, try by Azure sub as fallback
+  const subQuerySpec = {
     query: "SELECT * FROM c WHERE c.azureSub = @azureSub AND c.type = 'user'",
     parameters: [
       { name: "@azureSub", value: azureSub }
     ]
   };
 
-  const { resources } = await containers.users.items.query(querySpec).fetchAll();
-  const existingUser = resources[0] as User | undefined;
+  const { resources: subResults } = await containers.users.items.query(subQuerySpec).fetchAll();
+  const existingUserBySub = subResults[0] as User | undefined;
 
-  if (existingUser) {
-    return existingUser;
+  if (existingUserBySub) {
+    return existingUserBySub;
   }
 
-  // If user doesn't exist, create a new one
+  // If user doesn't exist at all, create a new one
   const newUser: User = {
     id: uuidv4(),
     type: "user",
-    azureSub,
     email,
+    azureSub,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -390,5 +437,55 @@ export async function getOrCreateUserByAzureSub(azureSub: string, email: string)
     throw new Error("Failed to create user");
   }
 
-  return resource;
+  debug('db', 'New user created successfully', {
+    userId: newUser.id,
+    email: newUser.email
+  } as Record<string, any>);
+  return resource as User;
+}
+
+export async function cleanupDuplicateUsers(): Promise<void> {
+  debug('db', 'Starting duplicate user cleanup');
+  
+  // Get all users
+  const querySpec = {
+    query: "SELECT * FROM c WHERE c.type = 'user' ORDER BY c.email, c.updatedAt DESC"
+  };
+  
+  const { resources } = await containers.users.items.query(querySpec).fetchAll();
+  const users = resources as User[];
+  
+  // Group users by email
+  const usersByEmail = new Map<string, User[]>();
+  users.forEach(user => {
+    const existing = usersByEmail.get(user.email) || [];
+    usersByEmail.set(user.email, [...existing, user]);
+  });
+  
+  // For each email with multiple users, keep only the most recent one
+  for (const [email, emailUsers] of usersByEmail.entries()) {
+    if (emailUsers.length > 1) {
+      debug('db', `Found ${emailUsers.length} users for email ${email}`);
+      
+      // Sort by updatedAt in descending order
+      const sortedUsers = emailUsers.sort((a, b) => {
+        // Handle potentially undefined updatedAt values
+        const dateA = a.updatedAt || a.createdAt || new Date(0).toISOString();
+        const dateB = b.updatedAt || b.createdAt || new Date(0).toISOString();
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      });
+      
+      // Keep the first one (most recent) and delete the rest
+      const [keepUser, ...duplicates] = sortedUsers;
+      
+      debug('db', `Keeping user ${keepUser.id}, deleting ${duplicates.length} duplicates`);
+      
+      for (const dupUser of duplicates) {
+        debug('db', `Deleting duplicate user`, { userId: dupUser.id, email: dupUser.email });
+        await containers.users.item(dupUser.id, dupUser.id).delete();
+      }
+    }
+  }
+  
+  debug('db', 'Duplicate user cleanup completed');
 }

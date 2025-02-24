@@ -4,24 +4,46 @@ import { NextResponse } from 'next/server';
 export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth?.user;
+  const userId = req.auth?.user?.id;
 
   // Always allow these paths
-  if (
-    nextUrl.pathname.startsWith('/_next') ||
-    nextUrl.pathname.startsWith('/api/auth/') ||
-    nextUrl.pathname.startsWith('/auth/')
-  ) {
+  const publicPaths = [
+    '/_next',
+    '/api/auth/',
+    '/auth/',
+    '/images/',
+    '/favicon.ico',
+  ];
+
+  // Check if the path is public
+  const isPublicPath = publicPaths.some(path => nextUrl.pathname.startsWith(path));
+  
+  if (isPublicPath) {
     return NextResponse.next();
   }
 
   // Protect all other routes
   if (!isLoggedIn) {
+    console.log(`[Middleware] Redirecting unauthenticated user to login from ${nextUrl.pathname}`);
     const signInUrl = new URL('/api/auth/signin', nextUrl);
     signInUrl.searchParams.set('callbackUrl', nextUrl.pathname);
     return Response.redirect(signInUrl);
   }
 
-  return NextResponse.next();
+  // Add debugging logs
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[Middleware] Authenticated user ${userId} accessing ${nextUrl.pathname}`);
+  }
+
+  // Add the user ID to request headers for server components
+  const requestHeaders = new Headers(req.headers);
+  if (userId) {
+    requestHeaders.set('x-user-id', userId);
+  }
+
+  return NextResponse.next({
+    headers: requestHeaders,
+  });
 });
 
 export const config = {

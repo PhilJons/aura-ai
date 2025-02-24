@@ -3,6 +3,9 @@ export interface User {
   id: string;
   email: string;
   password?: string;
+  azureSub?: string;
+  createdAt?: string;
+  updatedAt?: string;
   type: 'user';
 }
 

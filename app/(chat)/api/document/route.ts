@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   debug('api', 'Document GET request received', { id });
 
   if (!id) {
-    debugError('api', 'Missing document ID', null);
+    debugError('api', 'Missing document ID', {});
     return new Response("Missing document ID", { status: 400 });
   }
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     });
     return Response.json(documents);
   } catch (error) {
-    debugError('api', 'Failed to get documents', error);
+    debugError('api', 'Failed to get documents', { error: String(error) });
     return new Response("Failed to get documents", { status: 500 });
   }
 }
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   debug('api', 'Document POST request received', { id });
 
   if (!id) {
-    debugError('api', 'Missing document ID', null);
+    debugError('api', 'Missing document ID', {});
     return new Response("Missing document ID", { status: 400 });
   }
 
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     return Response.json(document);
   } catch (error) {
-    debugError('api', 'Failed to save document', error);
+    debugError('api', 'Failed to save document', { error: String(error) });
     return new Response("Failed to save document", { status: 500 });
   }
 }
@@ -89,7 +89,7 @@ export async function DELETE(request: NextRequest) {
     debug('api', 'Documents deleted after timestamp', { id, timestamp });
     return new Response(null, { status: 204 });
   } catch (error) {
-    debugError('api', 'Failed to delete documents', error);
+    debugError('api', 'Failed to delete documents', { error: String(error) });
     return new Response("Failed to delete documents", { status: 500 });
   }
 } 

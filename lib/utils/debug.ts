@@ -3,15 +3,18 @@
  */
 
 export type DebugNamespace = 
-  | 'block'        // Block state management
-  | 'document'     // Document operations
-  | 'api'          // API calls
-  | 'storage'      // Local storage operations
-  | 'render'       // Component rendering
-  | 'fetch'        // Data fetching
-  | 'tool'         // Tool operations
-  | 'message'      // Message processing
-  | 'all';         // All debugging
+  | 'chat'      // Chat operations
+  | 'db'        // Database operations
+  | 'auth'      // Authentication
+  | 'storage'   // Storage operations
+  | 'message'   // Message processing
+  | 'document'  // Document operations
+  | 'block'     // Block operations
+  | 'api'       // API operations
+  | 'render'    // Rendering
+  | 'fetch'     // Data fetching
+  | 'tool'      // Tool operations
+  | 'all';      // All debugging
 
 const DEBUG_NAMESPACES = new Set<DebugNamespace>();
 
@@ -72,92 +75,12 @@ const THROTTLE_INTERVAL = 1000; // 1 second
 const recentMessageSignatures = new Set<string>();
 const MESSAGE_SIGNATURE_TTL = 2000; // 2 seconds
 
-export function debug(namespace: DebugNamespace, message: string, data?: any) {
-  if (!isDebugEnabled(namespace)) return;
-
-  // Skip verbose block and render updates
-  if (namespace === 'block' && (
-    message.includes('Skipping block update') ||
-    message.includes('Skipping metadata update') ||
-    message.includes('Block component state') ||
-    message.includes('Document fetch state') ||
-    message.includes('Processing stream delta') ||
-    message.includes('Updating block state') ||
-    message.includes('Data stream update received')
-  )) {
-    return;
-  }
-
-  // Skip repetitive document updates
-  if (namespace === 'document' && (
-    message.includes('Creating editor instance') ||
-    message.includes('Editor instance created') ||
-    message.includes('Destroying editor instance')
-  )) {
-    return;
-  }
-
-  // Skip repetitive message updates
-  if (namespace === 'message' && (
-    message.includes('Chat initialization source') ||
-    message.includes('Messages updated')
-  )) {
-    return;
-  }
-
-  // Generate a signature for the log message
-  const signature = `${namespace}:${message}:${JSON.stringify(data)}`;
-
-  // Check for duplicate messages within TTL
-  if (recentMessageSignatures.has(signature)) {
-    return;
-  }
-
-  // Throttle frequent messages
-  const now = Date.now();
-  const lastLog = lastLogTimestamps[signature] || 0;
-  if (now - lastLog < THROTTLE_INTERVAL) {
-    return;
-  }
-
-  // Update tracking
-  lastLogTimestamps[signature] = now;
-  recentMessageSignatures.add(signature);
-  setTimeout(() => recentMessageSignatures.delete(signature), MESSAGE_SIGNATURE_TTL);
-
-  const timestamp = new Date().toISOString();
-  const prefix = `[${timestamp}] [${namespace}]`;
-  
-  if (data !== undefined) {
-    // Limit data output size and filter sensitive or redundant fields
-    const stringifiedData = typeof data === 'string' 
-      ? data 
-      : JSON.stringify(data, (key, value) => {
-          if (typeof value === 'string' && value.length > 100) {
-            return `${value.substring(0, 100)}...`;
-          }
-          // Skip logging certain verbose fields
-          if (['content', 'contentLength', 'hasContent', 'isStreaming'].includes(key)) {
-            return undefined;
-          }
-          return value;
-        }, 2);
-    console.log(`${prefix} ${message}:`, stringifiedData);
-  } else {
-    console.log(`${prefix} ${message}`);
-  }
+export function debug(namespace: DebugNamespace, message: string, data?: Record<string, any>) {
+  console.log(`[DEBUG] [${namespace}] ${message}`, data || '');
 }
 
-export function debugError(namespace: DebugNamespace, message: string, error: any) {
-  if (!isDebugEnabled(namespace)) return;
-
-  const timestamp = new Date().toISOString();
-  const prefix = `[${timestamp}] [${namespace}] [ERROR]`;
-  
-  console.error(`${prefix} ${message}:`, {
-    error: error instanceof Error ? error.message : String(error),
-    stack: error instanceof Error ? error.stack : undefined
-  });
+export function debugError(namespace: DebugNamespace, message: string, data?: Record<string, any>) {
+  console.error(`[ERROR] [${namespace}] ${message}`, data || '');
 }
 
 // Helper to wrap async functions with debug logging

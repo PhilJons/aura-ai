@@ -7,22 +7,9 @@
 */
 
 import NextAuth from "next-auth";
-import type { DefaultSession, NextAuthConfig } from "next-auth";
+import type { NextAuthConfig } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
 import { getOrCreateUserByAzureSub } from "@/lib/db/queries";
-
-// Extend Session type to include our needed properties
-declare module "next-auth" {
-  interface Session {
-    accessToken?: string;
-    user: {
-      id?: string;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-    } & DefaultSession["user"];
-  }
-}
 
 const authOptions: NextAuthConfig = {
   providers: [

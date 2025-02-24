@@ -5,7 +5,7 @@ import {
   smoothStream,
   streamText,
 } from 'ai';
-import { auth } from '@/app/(auth)/auth';
+import { auth } from '@/app/auth';
 import { myProvider } from '@/lib/ai/models';
 import { systemPrompt } from '@/lib/ai/prompts';
 import {
@@ -27,6 +27,7 @@ import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { getEncoding } from 'js-tiktoken';
 import { processDocument, type ProcessedDocument } from '@/lib/azure/document';
+import { getToken } from 'next-auth/jwt';
 
 // Maximum tokens we want to allow for the context (8k for GPT-4)
 const MAX_CONTEXT_TOKENS = 8000;
@@ -334,6 +335,11 @@ export async function POST(request: Request) {
           title,
           visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private'
         });
+      } else {
+        // Check if user has permission to modify this chat
+        if (chat.visibility === 'private' && chat.userId !== session.user.id) {
+          return new Response('Unauthorized', { status: 401 });
+        }
       }
 
       return createDataStreamResponse({
@@ -453,6 +459,11 @@ export async function POST(request: Request) {
         title,
         visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private'
       });
+    } else {
+      // Check if user has permission to modify this chat
+      if (chat.visibility === 'private' && chat.userId !== session.user.id) {
+        return new Response('Unauthorized', { status: 401 });
+      }
     }
 
     return createDataStreamResponse({
@@ -560,6 +571,40 @@ export async function DELETE(request: Request) {
 
     return new Response('Chat deleted', { status: 200 });
   } catch (error) {
+    return new Response('An error occurred while processing your request', {
+      status: 500,
+    });
+  }
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return new Response('Not Found', { status: 404 });
+  }
+
+  const session = await auth();
+  if (!session?.user?.id) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  try {
+    const chat = await getChatById({ id });
+
+    if (!chat) {
+      return new Response('Not Found', { status: 404 });
+    }
+
+    // Only allow access if chat is public or owned by the user
+    if (chat.visibility === 'private' && chat.userId !== session.user.id) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    return Response.json(chat);
+  } catch (error) {
+    console.error('Error fetching chat:', error);
     return new Response('An error occurred while processing your request', {
       status: 500,
     });
