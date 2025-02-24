@@ -50,6 +50,9 @@ export function Chat({
     experimental_throttle: 100,
     sendExtraMessageFields: true,
     generateId: generateUUID,
+    headers: {
+      'x-visibility-type': selectedVisibilityType
+    },
     onFinish: () => {
       mutate('/api/history');
       

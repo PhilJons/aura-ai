@@ -1,4 +1,4 @@
-import { auth } from '@/app/(auth)/auth';
+import { auth } from '@/app/auth';
 import { addStreamController, removeStreamController } from '@/lib/utils/stream';
 
 export const dynamic = 'force-dynamic';

@@ -357,3 +357,38 @@ export async function getDocumentsById({ id }: { id: string }): Promise<Document
     throw error;
   }
 }
+
+export async function getOrCreateUserByAzureSub(azureSub: string, email: string): Promise<User> {
+  // First try to find the user
+  const querySpec = {
+    query: "SELECT * FROM c WHERE c.azureSub = @azureSub AND c.type = 'user'",
+    parameters: [
+      { name: "@azureSub", value: azureSub }
+    ]
+  };
+
+  const { resources } = await containers.users.items.query(querySpec).fetchAll();
+  const existingUser = resources[0] as User | undefined;
+
+  if (existingUser) {
+    return existingUser;
+  }
+
+  // If user doesn't exist, create a new one
+  const newUser: User = {
+    id: uuidv4(),
+    type: "user",
+    azureSub,
+    email,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  const { resource } = await containers.users.items.create(newUser);
+  
+  if (!resource) {
+    throw new Error("Failed to create user");
+  }
+
+  return resource;
+}

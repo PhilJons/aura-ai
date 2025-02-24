@@ -1,4 +1,4 @@
-import { auth } from '@/app/(auth)/auth';
+import { auth } from '@/app/auth';
 import { containers } from '@/lib/db/cosmos';
 import type { Message } from '@/lib/db/schema';
 import { getMessagesByChatId } from '@/lib/db/queries';

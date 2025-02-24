@@ -2,8 +2,9 @@ import { cookies } from 'next/headers';
 
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { Providers } from '@/components/providers';
 
-import { auth } from '../(auth)/auth';
+import { auth } from '../auth';
 import Script from 'next/script';
 
 export const experimental_ppr = true;
@@ -17,7 +18,7 @@ export default async function Layout({
   const isCollapsed = cookieStore.get('sidebar:state')?.value !== 'true';
 
   return (
-    <>
+    <Providers>
       <Script
         src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"
         strategy="beforeInteractive"
@@ -26,6 +27,6 @@ export default async function Layout({
         <AppSidebar user={session?.user} />
         <SidebarInset>{children}</SidebarInset>
       </SidebarProvider>
-    </>
+    </Providers>
   );
 }
