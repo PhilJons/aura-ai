@@ -11,11 +11,9 @@ import type { Vote } from '@/lib/db/schema';
 import { fetcher, generateUUID } from '@/lib/utils';
 import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
 
-import { Block } from './block';
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
 import type { VisibilityType } from './visibility-selector';
-import { useBlockSelector } from '@/hooks/use-block';
 import { toast } from 'sonner';
 
 export function Chat({
@@ -149,7 +147,6 @@ export function Chat({
         setMessages={setMessages}
         reload={reload}
         isReadonly={isReadonly}
-        isBlockVisible={false}
       />
 
       <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">

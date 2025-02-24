@@ -19,7 +19,6 @@ interface MessagesProps {
     chatRequestOptions?: ChatRequestOptions,
   ) => Promise<string | null | undefined>;
   isReadonly: boolean;
-  isBlockVisible: boolean;
 }
 
 function PureMessages({

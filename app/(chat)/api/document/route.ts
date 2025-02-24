@@ -1,6 +1,5 @@
 import type { NextRequest } from "next/server";
 import { getDocumentsById, saveDocument, deleteDocumentsByIdAfterTimestamp } from "@/lib/db/queries";
-import type { BlockKind } from "@/components/block";
 import { debug, debugError } from "@/lib/utils/debug";
 import { auth } from "@/app/(auth)/auth";
 
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
       id,
       title: body.title,
       content: body.content || '',
-      kind: body.kind as BlockKind,
+      kind: body.kind,
       userId: session.user.id
     });
 

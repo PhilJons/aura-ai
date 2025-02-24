@@ -1,5 +1,4 @@
 import 'server-only';
-import type { BlockKind } from '@/components/block';
 import { containers } from './cosmos';
 import type { User, Chat, Message, Vote, Document, Suggestion } from './schema';
 import { v4 as uuidv4 } from 'uuid';
@@ -153,7 +152,7 @@ export async function saveDocument({
 }: {
   id: string;
   title: string;
-  kind: BlockKind;
+  kind: string;
   content: string;
   userId: string;
 }): Promise<Document> {

@@ -1,8 +1,7 @@
 import { type DataStreamWriter, tool } from 'ai';
 import type { Session } from 'next-auth';
 import { z } from 'zod';
-import { getDocumentById, } from '@/lib/db/queries';
-import { documentHandlersByBlockKind } from '@/lib/blocks/server';
+import { getDocumentById } from '@/lib/db/queries';
 
 interface UpdateDocumentProps {
   session: Session;
@@ -27,34 +26,11 @@ export const updateDocument = ({ session, dataStream }: UpdateDocumentProps) =>
         };
       }
 
-      dataStream.writeData({
-        type: 'clear',
-        content: document.title,
-      });
-
-      const documentHandler = documentHandlersByBlockKind.find(
-        (documentHandlerByBlockKind) =>
-          documentHandlerByBlockKind.kind === document.kind,
-      );
-
-      if (!documentHandler) {
-        throw new Error(`No document handler found for kind: ${document.kind}`);
-      }
-
-      await documentHandler.onUpdateDocument({
-        document,
-        description,
-        dataStream,
-        session,
-      });
-
-      dataStream.writeData({ type: 'finish', content: '' });
-
       return {
         id,
         title: document.title,
         kind: document.kind,
-        content: 'The document has been updated successfully.',
+        content: 'The Canvas Document Blocks feature is temporarily disabled.',
       };
     },
   });

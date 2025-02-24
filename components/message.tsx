@@ -18,15 +18,13 @@ import { MessageEditor } from "./message-editor";
 import { DocumentPreview } from "./document-preview";
 import { MessageReasoning } from "./message-reasoning";
 import { debug } from "@/lib/utils/debug";
-import { useBlock } from "@/hooks/use-block";
-import type { UIBlock, BlockKind } from "./block";
 import { PreviewAttachment } from './preview-attachment';
 
 interface DocumentToolInvocation {
   toolName: string;
   toolCallId: string;
   state: "result";
-  result: { id: string; title: string; kind: BlockKind; content?: string };
+  result: { id: string; title: string; kind: string; content?: string };
 }
 
 interface ToolInvocationBase {
@@ -41,7 +39,7 @@ interface ToolInvocationCall extends ToolInvocationBase {
 
 interface ToolInvocationResult extends ToolInvocationBase {
   state: 'result';
-  result: { id: string; title: string; kind: BlockKind; content?: string };
+  result: { id: string; title: string; kind: string; content?: string };
 }
 
 type ToolInvocation = ToolInvocationCall | ToolInvocationResult;
@@ -108,8 +106,6 @@ const PurePreviewMessage = ({
   isReadonly: boolean;
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
-  const { block, setBlock } = useBlock();
-  const [isDocumentInitialized, setIsDocumentInitialized] = useState(false);
   const originalMessageId = useRef(message.id);
 
   // Use the original message ID for tool invocations to maintain stability
@@ -134,52 +130,6 @@ const PurePreviewMessage = ({
     }
     return documentToolInvocation.result;
   }, [documentToolInvocation]);
-
-  useEffect(() => {
-    if (documentToolInvocation && documentPreviewResult) {
-      debug("message", "Initializing document state", {
-        messageId: messageWithStableId.id,
-        toolCallId: documentToolInvocation.toolCallId,
-        documentId: documentPreviewResult.id,
-        currentBlockId: block.documentId,
-        isFirstInitialization: !isDocumentInitialized
-      });
-
-      // Use a function to update block state to ensure we have latest values
-      setBlock((currentBlock: UIBlock) => {
-        // Always update on document tool invocation to ensure proper initialization
-        debug("message", "Updating block state with document", {
-          fromBlockId: currentBlock.documentId,
-          toDocumentId: documentPreviewResult.id,
-          isNewDocument: currentBlock.documentId === "init",
-          hasContentChange: currentBlock.content !== (documentPreviewResult.content || "")
-        });
-
-        const updatedBlock = {
-          ...currentBlock,
-          documentId: documentPreviewResult.id,
-          title: documentPreviewResult.title,
-          kind: documentPreviewResult.kind,
-          status: "idle" as const,
-          isVisible: true,
-          content: documentPreviewResult.content || "",
-          boundingBox: {
-            top: 0,
-            left: 0,
-            width: 0,
-            height: 0
-          }
-        };
-
-        // Only mark as initialized after successful update
-        if (!isDocumentInitialized) {
-          setTimeout(() => setIsDocumentInitialized(true), 0);
-        }
-
-        return updatedBlock;
-      });
-    }
-  }, [documentToolInvocation, documentPreviewResult, messageWithStableId.id, setBlock, block.documentId, isDocumentInitialized]);
 
   useEffect(() => {
     debug('message', 'Message rendered', {

@@ -26,14 +26,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { sanitizeUIMessages } from '@/lib/utils';
+import equal from 'fast-deep-equal';
 
 import {
   ArrowUpIcon,
   StopIcon,
   SummarizeIcon,
 } from './icons';
-import { blockDefinitions, type BlockKind } from './block';
-import type { BlockToolbarItem } from './create-block';
 import type { UseChatHelpers } from 'ai/react';
 
 type ToolProps = {
@@ -268,7 +267,15 @@ export const Tools = ({
   ) => Promise<string | null | undefined>;
   isAnimating: boolean;
   setIsToolbarVisible: Dispatch<SetStateAction<boolean>>;
-  tools: Array<BlockToolbarItem>;
+  tools: Array<{
+    description: string;
+    icon: ReactNode;
+    onClick: ({
+      appendMessage,
+    }: {
+      appendMessage: UseChatHelpers['append'];
+    }) => void;
+  }>;
 }) => {
   const [primaryTool, ...secondaryTools] = tools;
 
@@ -317,7 +324,7 @@ const PureToolbar = ({
   isLoading,
   stop,
   setMessages,
-  blockKind,
+  tools = [],
 }: {
   isToolbarVisible: boolean;
   setIsToolbarVisible: Dispatch<SetStateAction<boolean>>;
@@ -328,7 +335,15 @@ const PureToolbar = ({
   ) => Promise<string | null | undefined>;
   stop: () => void;
   setMessages: Dispatch<SetStateAction<Message[]>>;
-  blockKind: BlockKind;
+  tools?: Array<{
+    description: string;
+    icon: ReactNode;
+    onClick: ({
+      appendMessage,
+    }: {
+      appendMessage: UseChatHelpers['append'];
+    }) => void;
+  }>;
 }) => {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -372,17 +387,7 @@ const PureToolbar = ({
     }
   }, [isLoading, setIsToolbarVisible]);
 
-  const blockDefinition = blockDefinitions.find(
-    (definition) => definition.kind === blockKind,
-  );
-
-  if (!blockDefinition) {
-    throw new Error('Block definition not found!');
-  }
-
-  const toolsByBlockKind = blockDefinition.toolbar;
-
-  if (toolsByBlockKind.length === 0) {
+  if (tools.length === 0) {
     return null;
   }
 
@@ -404,7 +409,7 @@ const PureToolbar = ({
               : {
                   opacity: 1,
                   y: 0,
-                  height: toolsByBlockKind.length * 50,
+                  height: tools.length * 50,
                   transition: { delay: 0 },
                   scale: 1,
                 }
@@ -461,7 +466,7 @@ const PureToolbar = ({
             selectedTool={selectedTool}
             setIsToolbarVisible={setIsToolbarVisible}
             setSelectedTool={setSelectedTool}
-            tools={toolsByBlockKind}
+            tools={tools}
           />
         )}
       </motion.div>
@@ -472,7 +477,7 @@ const PureToolbar = ({
 export const Toolbar = memo(PureToolbar, (prevProps, nextProps) => {
   if (prevProps.isLoading !== nextProps.isLoading) return false;
   if (prevProps.isToolbarVisible !== nextProps.isToolbarVisible) return false;
-  if (prevProps.blockKind !== nextProps.blockKind) return false;
+  if (!equal(prevProps.tools, nextProps.tools)) return false;
 
   return true;
 });

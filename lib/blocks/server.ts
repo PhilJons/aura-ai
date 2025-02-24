@@ -1,5 +1,3 @@
-
-import type { BlockKind } from '@/components/block';
 import type { DataStreamWriter } from 'ai';
 import type { Document } from '../db/schema';
 import { saveDocument } from '../db/queries';
@@ -9,7 +7,7 @@ import { debug } from '@/lib/utils/debug';
 export interface SaveDocumentProps {
   id: string;
   title: string;
-  kind: BlockKind;
+  kind: string;
   content: string;
   userId: string;
 }
@@ -28,17 +26,17 @@ export interface UpdateDocumentCallbackProps {
   session: Session;
 }
 
-export interface DocumentHandler<T = BlockKind> {
-  kind: T;
+export interface DocumentHandler {
+  kind: string;
   onCreateDocument: (args: CreateDocumentCallbackProps) => Promise<void>;
   onUpdateDocument: (args: UpdateDocumentCallbackProps) => Promise<void>;
 }
 
-export function createDocumentHandler<T extends BlockKind>(config: {
-  kind: T;
+export function createDocumentHandler(config: {
+  kind: string;
   onCreateDocument: (params: CreateDocumentCallbackProps) => Promise<string>;
   onUpdateDocument: (params: UpdateDocumentCallbackProps) => Promise<string>;
-}): DocumentHandler<T> {
+}): DocumentHandler {
   return {
     kind: config.kind,
     onCreateDocument: async (args: CreateDocumentCallbackProps) => {
@@ -111,10 +109,6 @@ export function createDocumentHandler<T extends BlockKind>(config: {
 }
 
 /*
- * Use this array to define the document handlers for each block kind.
+ * Use this array to define the document handlers.
  */
-export const documentHandlersByBlockKind: Array<DocumentHandler> = [
-  // Temporarily disabled all document handlers
-];
-
-export const blockKinds = ['text', 'code', 'image', 'sheet'] as const;
+export const documentHandlers: Array<DocumentHandler> = [];

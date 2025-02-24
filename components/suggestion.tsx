@@ -9,16 +9,15 @@ import type { UISuggestion } from '@/lib/editor/suggestions';
 import { CrossIcon, MessageIcon } from './icons';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
-import type { BlockKind } from './block';
 
 export const Suggestion = ({
   suggestion,
   onApply,
-  blockKind,
+  kind,
 }: {
   suggestion: UISuggestion;
   onApply: () => void;
-  blockKind: BlockKind;
+  kind: string;
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { width: windowWidth } = useWindowSize();
@@ -28,8 +27,8 @@ export const Suggestion = ({
       {!isExpanded ? (
         <motion.div
           className={cn('cursor-pointer text-muted-foreground p-1', {
-            'absolute -right-8': blockKind === 'text',
-            'sticky top-0 right-4': blockKind === 'code',
+            'absolute -right-8': kind === 'text',
+            'sticky top-0 right-4': kind === 'code',
           })}
           onClick={() => {
             setIsExpanded(true);

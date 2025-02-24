@@ -7,8 +7,8 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
-import type { BlockKind, UIBlock } from './block';
 import { FileIcon, FullscreenIcon, ImageIcon, LoaderIcon } from './icons';
 import { cn, fetcher } from '@/lib/utils';
 import type { Document } from '@/lib/db/schema';
@@ -17,7 +17,6 @@ import useSWR from 'swr';
 import { Editor } from './editor';
 import { DocumentToolCall, DocumentToolResult } from './document';
 import { CodeEditor } from './code-editor';
-import { useBlock } from '@/hooks/use-block';
 import { SpreadsheetEditor } from './sheet-editor';
 import { ImageEditor } from './image-editor';
 import { debug } from '@/lib/utils/debug';
@@ -31,13 +30,41 @@ interface DocumentPreviewProps {
   isCompact?: boolean;
 }
 
+interface DocumentState {
+  documentId: string;
+  title: string;
+  kind: string;
+  content: string;
+  status: 'streaming' | 'idle';
+  isVisible: boolean;
+  boundingBox: {
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  };
+}
+
 export function DocumentPreview({
   isReadonly,
   result,
   args,
   isCompact = true, // Default to compact mode for chat messages
 }: DocumentPreviewProps) {
-  const { block, setBlock } = useBlock();
+  const [documentState, setDocumentState] = useState<DocumentState>({
+    documentId: '',
+    title: '',
+    kind: '',
+    content: '',
+    status: 'idle',
+    isVisible: false,
+    boundingBox: {
+      top: 0,
+      left: 0,
+      width: 0,
+      height: 0
+    }
+  });
   const compactButtonRef = useRef<HTMLButtonElement>(null);
   const expandedDivRef = useRef<HTMLDivElement>(null);
   const previousDocumentId = useRef<string | null>(null);
@@ -47,14 +74,14 @@ export function DocumentPreview({
     resultTitle: result?.title,
     resultKind: result?.kind,
     hasArgs: !!args,
-    blockId: block.documentId,
-    blockStatus: block.status,
+    documentId: documentState.documentId,
+    status: documentState.status,
     isReadonly,
     isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1,
-    currentBlockState: {
-      isVisible: block.isVisible,
-      content: `${block.content?.substring(0, 100)}...`,
-      boundingBox: block.boundingBox
+    currentState: {
+      isVisible: documentState.isVisible,
+      content: `${documentState.content?.substring(0, 100)}...`,
+      boundingBox: documentState.boundingBox
     }
   });
 
@@ -90,13 +117,13 @@ export function DocumentPreview({
 
   // Memoize the bounding box update function
   const updateBoundingBox = useCallback(() => {
-    if (!block.documentId || isCompact) return;
+    if (!documentState.documentId || isCompact) return;
     
     const boundingBox = expandedDivRef.current?.getBoundingClientRect();
     if (!boundingBox) return;
     
-    setBlock(block => ({
-      ...block,
+    setDocumentState(state => ({
+      ...state,
       boundingBox: {
         left: boundingBox.x,
         top: boundingBox.y,
@@ -104,7 +131,7 @@ export function DocumentPreview({
         height: boundingBox.height,
       },
     }));
-  }, [block.documentId, isCompact, setBlock]);
+  }, [documentState.documentId, isCompact]);
 
   useEffect(() => {
     updateBoundingBox();
@@ -116,19 +143,19 @@ export function DocumentPreview({
       debug('document', 'Initializing document', {
         documentId: result.id,
         previousDocumentId: previousDocumentId.current,
-        blockId: block.documentId,
-        blockStatus: block.status
+        currentId: documentState.documentId,
+        status: documentState.status
       });
 
       previousDocumentId.current = result.id;
     }
-  }, [result?.id, block.documentId, block.status]);
+  }, [result?.id, documentState.documentId, documentState.status]);
 
-  if (block.status === 'streaming') {
-    debug('document', 'Block is streaming', {
-      documentId: block.documentId,
-      title: block.title,
-      kind: block.kind,
+  if (documentState.status === 'streaming') {
+    debug('document', 'Document is streaming', {
+      documentId: documentState.documentId,
+      title: documentState.title,
+      kind: documentState.kind,
       hasResult: !!result,
       hasArgs: !!args,
       resultId: result?.id,
@@ -142,8 +169,8 @@ export function DocumentPreview({
         resultId: result.id,
         resultTitle: result.title,
         resultKind: result.kind,
-        blockId: block.documentId,
-        blockStatus: block.status,
+        documentId: documentState.documentId,
+        status: documentState.status,
         isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
       });
 
@@ -159,8 +186,8 @@ export function DocumentPreview({
     if (args) {
       debug('document', 'Processing document tool call', {
         argsTitle: args.title,
-        blockId: block.documentId,
-        blockStatus: block.status,
+        documentId: documentState.documentId,
+        status: documentState.status,
         isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
       });
 
@@ -176,21 +203,21 @@ export function DocumentPreview({
 
   if (isDocumentsFetching) {
     debug('document', 'Loading document skeleton', {
-      blockKind: result?.kind ?? args?.kind,
+      kind: result?.kind ?? args?.kind,
       documentId: result?.id,
       isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
     });
-    return <LoadingSkeleton blockKind={result?.kind ?? args?.kind} isCompact={isCompact} />;
+    return <LoadingSkeleton kind={result?.kind ?? args?.kind} isCompact={isCompact} />;
   }
 
   const document: Document | null = previewDocument
     ? previewDocument
-    : block.status === 'streaming'
+    : documentState.status === 'streaming'
       ? {
-          title: block.title,
-          kind: block.kind,
-          content: block.content,
-          id: block.documentId,
+          title: documentState.title,
+          kind: documentState.kind,
+          content: documentState.content,
+          id: documentState.documentId,
           createdAt: new Date().toISOString(),
           userId: 'noop',
           type: 'document'
@@ -203,8 +230,8 @@ export function DocumentPreview({
     documentTitle: document?.title,
     documentKind: document?.kind,
     documentContentLength: document?.content?.length,
-    blockStatus: block.status,
-    blockVisibility: block.isVisible,
+    status: documentState.status,
+    visibility: documentState.isVisible,
     isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1,
     resultId: result?.id,
     resultTitle: result?.title
@@ -212,12 +239,12 @@ export function DocumentPreview({
 
   if (!document) {
     debug('document', 'No document available, showing skeleton', {
-      blockKind: block.kind,
+      kind: documentState.kind,
       resultId: result?.id,
       argsId: args?.id,
       isReload: typeof window !== 'undefined' && window.performance?.navigation?.type === 1
     });
-    return <LoadingSkeleton blockKind={block.kind} isCompact={isCompact} />;
+    return <LoadingSkeleton kind={documentState.kind} isCompact={isCompact} />;
   }
 
   if (isCompact) {
@@ -243,27 +270,24 @@ export function DocumentPreview({
               height: rect.height,
             };
 
-            setBlock({
+            setDocumentState({
               documentId: document.id,
               kind: document.kind,
               content: document.content || '',
               title: document.title,
-              isVisible: true,
               status: 'idle',
-              boundingBox,
+              isVisible: true,
+              boundingBox
             });
           }}
           ref={compactButtonRef}
         >
-          <div className="text-muted-foreground mt-1">
-            {document.kind === 'image' ? (
-              <ImageIcon />
-            ) : (
-              <FileIcon />
-            )}
-          </div>
-          <div className="text-left">
-            {document.title}
+          <DocumentIcon kind={document.kind} />
+          <div className="flex flex-col items-start gap-1">
+            <div className="text-sm font-medium">{document.title}</div>
+            <div className="text-xs text-muted-foreground">
+              Click to view {document.kind}
+            </div>
           </div>
         </button>
       </div>
@@ -271,234 +295,141 @@ export function DocumentPreview({
   }
 
   return (
-    <div className="relative w-full cursor-pointer" ref={expandedDivRef}>
-      <HitboxLayer hitboxRef={expandedDivRef} result={result} setBlock={setBlock} />
+    <div
+      ref={expandedDivRef}
+      className={cn(
+        'fixed inset-4 z-50 bg-background rounded-xl border shadow-2xl flex flex-col',
+        {
+          'opacity-0 pointer-events-none': !documentState.isVisible,
+          'opacity-100': documentState.isVisible,
+        },
+      )}
+    >
       <DocumentHeader
         title={document.title}
         kind={document.kind}
-        isStreaming={block.status === 'streaming'}
+        isStreaming={documentState.status === 'streaming'}
       />
-      <DocumentContent document={document} />
+
+      <div className="flex-1 overflow-hidden">
+        {document.kind === 'code' && (
+          <CodeEditor
+            content={document.content || ''}
+            onSaveContent={async (content: string) => {
+              setDocumentState(state => ({
+                ...state,
+                content
+              }));
+            }}
+            status={documentState.status}
+            isCurrentVersion={true}
+            currentVersionIndex={0}
+            suggestions={[]}
+          />
+        )}
+
+        {document.kind === 'text' && (
+          <Editor
+            content={document.content || ''}
+            onSaveContent={async (content: string) => {
+              setDocumentState(state => ({
+                ...state,
+                content
+              }));
+            }}
+            status={documentState.status}
+            isCurrentVersion={true}
+            currentVersionIndex={0}
+            suggestions={[]}
+          />
+        )}
+
+        {document.kind === 'sheet' && (
+          <SpreadsheetEditor
+            content={document.content || ''}
+            saveContent={async (content: string) => {
+              setDocumentState(state => ({
+                ...state,
+                content
+              }));
+            }}
+            status={documentState.status}
+            isCurrentVersion={true}
+            currentVersionIndex={0}
+          />
+        )}
+
+        {document.kind === 'image' && (
+          <ImageEditor
+            content={document.content || ''}
+            title={document.title}
+            isCurrentVersion={true}
+            currentVersionIndex={0}
+            status={documentState.status}
+            isInline={true}
+          />
+        )}
+      </div>
     </div>
   );
 }
 
-const LoadingSkeleton = ({ blockKind, isCompact = true }: { blockKind: BlockKind; isCompact?: boolean }) => {
+const LoadingSkeleton = ({ kind, isCompact = true }: { kind: string; isCompact?: boolean }) => {
   if (isCompact) {
-    return (
-      <div className="w-fit">
-        <div className="border py-2 px-3 rounded-xl flex flex-row gap-3 items-center">
-          <div className="text-muted-foreground">
-            <div className="animate-pulse rounded-md size-4 bg-muted-foreground/20" />
-          </div>
-          <div className="animate-pulse rounded-lg h-4 bg-muted-foreground/20 w-24" />
-        </div>
-      </div>
-    );
+    return <InlineDocumentSkeleton />;
   }
 
   return (
-    <div className="w-full">
-      <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-center justify-between dark:bg-muted h-[57px] dark:border-zinc-700 border-b-0">
+    <div className="fixed inset-4 z-50 bg-background rounded-xl border shadow-2xl flex flex-col">
+      <div className="flex flex-row items-center justify-between gap-4 p-4 border-b">
         <div className="flex flex-row items-center gap-3">
-          <div className="text-muted-foreground">
-            <div className="animate-pulse rounded-md size-4 bg-muted-foreground/20" />
+          <DocumentIcon kind={kind} />
+          <div className="flex flex-col gap-1">
+            <div className="h-5 w-32 bg-muted animate-pulse rounded" />
+            <div className="h-4 w-24 bg-muted animate-pulse rounded" />
           </div>
-          <div className="animate-pulse rounded-lg h-4 bg-muted-foreground/20 w-24" />
-        </div>
-        <div>
-          <FullscreenIcon />
         </div>
       </div>
-      {blockKind === 'image' ? (
-        <div className="overflow-y-scroll border rounded-b-2xl bg-muted border-t-0 dark:border-zinc-700">
-          <div className="animate-pulse h-[257px] bg-muted-foreground/20 w-full" />
-        </div>
-      ) : (
-        <div className="overflow-y-scroll border rounded-b-2xl p-8 pt-4 bg-muted border-t-0 dark:border-zinc-700">
-          <InlineDocumentSkeleton />
-        </div>
-      )}
-    </div>
-  );
-};
 
-interface HitboxLayerProps {
-  hitboxRef: React.RefObject<HTMLElement>;
-  result: any;
-  setBlock: (updaterFn: UIBlock | ((currentBlock: UIBlock) => UIBlock)) => void;
-}
-
-const PureHitboxLayer = ({
-  hitboxRef,
-  result,
-  setBlock,
-}: HitboxLayerProps) => {
-  const handleClick = useCallback((event: MouseEvent<HTMLElement>) => {
-    const boundingBox = event.currentTarget.getBoundingClientRect();
-
-    setBlock((block) =>
-      block.status === 'streaming'
-        ? { ...block, isVisible: true }
-        : {
-            ...block,
-            title: result.title,
-            documentId: result.id,
-            kind: result.kind,
-            isVisible: true,
-            boundingBox: {
-              left: boundingBox.x,
-              top: boundingBox.y,
-              width: boundingBox.width,
-              height: boundingBox.height,
-            },
-          },
-    );
-  }, [setBlock, result]);
-
-  return (
-    <div
-      className="size-full absolute top-0 left-0 rounded-xl z-10"
-      ref={hitboxRef as React.RefObject<HTMLDivElement>}
-      onClick={handleClick}
-      role="presentation"
-      aria-hidden="true"
-    >
-      <div className="w-full p-4 flex justify-end items-center">
-        <div className="absolute right-[9px] top-[13px] p-2 hover:dark:bg-zinc-700 rounded-md hover:bg-zinc-100">
-          <FullscreenIcon />
-        </div>
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full w-full bg-muted animate-pulse" />
       </div>
     </div>
   );
 };
 
-const HitboxLayer = memo(PureHitboxLayer, (prevProps, nextProps) => {
-  if (!equal(prevProps.result, nextProps.result)) return false;
-  return true;
-});
+const DocumentIcon = ({ kind }: { kind: string }) => {
+  switch (kind) {
+    case 'image':
+      return <ImageIcon size={20} />;
+    default:
+      return <FileIcon size={20} />;
+  }
+};
 
-const PureDocumentHeader = ({
+const DocumentHeader = ({
   title,
   kind,
   isStreaming,
 }: {
   title: string;
-  kind: BlockKind;
+  kind: string;
   isStreaming: boolean;
 }) => (
-  <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-start sm:items-center justify-between dark:bg-muted border-b-0 dark:border-zinc-700">
-    <div className="flex flex-row items-start sm:items-center gap-3">
-      <div className="text-muted-foreground">
-        {isStreaming ? (
-          <div className="animate-spin">
-            <LoaderIcon />
-          </div>
-        ) : kind === 'image' ? (
-          <ImageIcon />
-        ) : (
-          <FileIcon />
-        )}
+  <div className="flex flex-row items-center justify-between gap-4 p-4 border-b">
+    <div className="flex flex-row items-center gap-3">
+      <DocumentIcon kind={kind} />
+      <div className="flex flex-col gap-1">
+        <div className="text-sm font-medium">{title}</div>
+        <div className="text-xs text-muted-foreground">
+          {isStreaming ? 'Generating...' : kind}
+        </div>
       </div>
-      <div className="-translate-y-1 sm:translate-y-0 font-medium">{title}</div>
     </div>
-    <div className="w-8" />
+
+    <div className="flex flex-row items-center gap-2">
+      {isStreaming && <div className="animate-spin"><LoaderIcon size={14} /></div>}
+      <FullscreenIcon size={14} />
+    </div>
   </div>
 );
-
-const DocumentHeader = memo(PureDocumentHeader, (prevProps, nextProps) => {
-  // Re-render if title changes
-  if (prevProps.title !== nextProps.title) return false;
-  
-  // Re-render if kind changes
-  if (prevProps.kind !== nextProps.kind) return false;
-  
-  // Re-render if streaming state changes
-  if (prevProps.isStreaming !== nextProps.isStreaming) return false;
-  
-  // No relevant changes, prevent re-render
-  return true;
-});
-
-const DocumentContent = memo(({ document }: { document: Document }) => {
-  const { block } = useBlock();
-
-  debug('document', 'Document content initialization', {
-    documentId: document.id,
-    documentKind: document.kind,
-    contentLength: document.content?.length,
-    blockStatus: block.status,
-    hasContent: !!document.content
-  });
-
-  const containerClassName = useMemo(() => 
-    cn(
-      'h-[257px] overflow-y-scroll border rounded-b-2xl dark:bg-muted border-t-0 dark:border-zinc-700',
-      {
-        'p-4 sm:px-14 sm:py-16': document.kind === 'text',
-        'p-0': document.kind === 'code',
-      }
-    ),
-    [document.kind]
-  );
-
-  const commonProps = useMemo(() => ({
-    content: document.content ?? '',
-    isCurrentVersion: true,
-    currentVersionIndex: 0,
-    status: block.status,
-    saveContent: () => {},
-    suggestions: [],
-  }), [document.content, block.status]);
-
-  debug('document', 'Editor props prepared', {
-    documentId: document.id,
-    documentKind: document.kind,
-    contentLength: commonProps.content.length,
-    isCurrentVersion: commonProps.isCurrentVersion,
-    status: commonProps.status
-  });
-
-  return (
-    <div className={containerClassName}>
-      {document.kind === 'text' ? (
-        <Editor {...commonProps} onSaveContent={() => {}} />
-      ) : document.kind === 'code' ? (
-        <div className="flex flex-1 relative w-full">
-          <div className="absolute inset-0">
-            <CodeEditor {...commonProps} onSaveContent={() => {}} />
-          </div>
-        </div>
-      ) : document.kind === 'sheet' ? (
-        <div className="flex flex-1 relative size-full p-4">
-          <div className="absolute inset-0">
-            <SpreadsheetEditor {...commonProps} />
-          </div>
-        </div>
-      ) : document.kind === 'image' ? (
-        <ImageEditor
-          title={document.title}
-          content={document.content ?? ''}
-          isCurrentVersion={true}
-          currentVersionIndex={0}
-          status={block.status}
-          isInline={true}
-        />
-      ) : null}
-    </div>
-  );
-}, (prevProps, nextProps) => {
-  // Re-render if document content changes
-  if (prevProps.document.content !== nextProps.document.content) return false;
-  
-  // Re-render if document kind changes
-  if (prevProps.document.kind !== nextProps.document.kind) return false;
-  
-  // Re-render if document title changes (needed for image editor)
-  if (prevProps.document.title !== nextProps.document.title) return false;
-  
-  // No relevant changes, prevent re-render
-  return true;
-});
-
-DocumentContent.displayName = 'DocumentContent';

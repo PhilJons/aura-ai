@@ -38,7 +38,7 @@ export interface Document {
   createdAt: string;
   title: string;
   content?: string;
-  kind: 'text' | 'code' | 'image' | 'sheet';
+  kind: string;
   userId: string;
   type: 'document';
 }

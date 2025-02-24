@@ -9,7 +9,6 @@ import {
   useState,
 } from 'react';
 import { cn } from '@/lib/utils';
-import { useBlockSelector } from '@/hooks/use-block';
 
 export interface ConsoleOutputContent {
   type: 'text' | 'image';
@@ -25,14 +24,13 @@ export interface ConsoleOutput {
 interface ConsoleProps {
   consoleOutputs: Array<ConsoleOutput>;
   setConsoleOutputs: Dispatch<SetStateAction<Array<ConsoleOutput>>>;
+  isVisible?: boolean;
 }
 
-export function Console({ consoleOutputs, setConsoleOutputs }: ConsoleProps) {
+export function Console({ consoleOutputs, setConsoleOutputs, isVisible = true }: ConsoleProps) {
   const [height, setHeight] = useState<number>(300);
   const [isResizing, setIsResizing] = useState(false);
   const consoleEndRef = useRef<HTMLDivElement>(null);
-
-  const isBlockVisible = useBlockSelector((state) => state.isVisible);
 
   const minHeight = 100;
   const maxHeight = 800;
@@ -71,12 +69,12 @@ export function Console({ consoleOutputs, setConsoleOutputs }: ConsoleProps) {
   }, [consoleOutputs]);
 
   useEffect(() => {
-    if (!isBlockVisible) {
+    if (!isVisible) {
       setConsoleOutputs([]);
     }
-  }, [isBlockVisible, setConsoleOutputs]);
+  }, [isVisible, setConsoleOutputs]);
 
-  return consoleOutputs.length > 0 ? (
+  return consoleOutputs.length > 0 && isVisible ? (
     <>
       <div
         className="h-2 w-full fixed cursor-ns-resize z-50"

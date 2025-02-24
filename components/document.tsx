@@ -1,7 +1,5 @@
 import { memo } from 'react';
 
-import type { BlockKind } from './block';
-
 const getActionText = (
   type: 'create' | 'update' | 'request-suggestions',
   tense: 'present' | 'past',
@@ -22,7 +20,7 @@ const getActionText = (
 
 export interface DocumentToolResultProps {
   type: 'create' | 'update' | 'request-suggestions';
-  result: { id: string; title: string; kind: BlockKind };
+  result: { id: string; title: string; kind: string };
   isReadonly: boolean;
 }
 
