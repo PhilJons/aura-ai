@@ -175,7 +175,7 @@ export const PreviewAttachment = ({
           role="button"
           tabIndex={0}
           className={cn(
-            "relative w-full min-w-[200px] h-14 bg-muted/40 dark:bg-muted/20",
+            "relative w-full min-w-[200px] max-w-[300px] h-14 bg-muted/40 dark:bg-muted/20",
             "rounded-lg border border-border/50 dark:border-border/30",
             "flex items-center gap-3 px-3 cursor-pointer overflow-visible",
             "transition-all duration-200",
@@ -195,7 +195,7 @@ export const PreviewAttachment = ({
                 alt={name}
                 width={32}
                 height={32}
-                className="object-cover rounded"
+                className="object-cover rounded w-8 h-8"
               />
             )}
 

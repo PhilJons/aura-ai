@@ -49,7 +49,10 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   );
 
   // Convert regular messages for UI display
-  const uiMessages = convertToUIMessages(regularMessages);
+  const uiMessages = convertToUIMessages(regularMessages.map(msg => ({
+    ...msg,
+    experimental_attachments: msg.attachments ? JSON.parse(msg.attachments) : []
+  })));
 
   // Convert system messages for AI context
   const aiSystemMessages = systemMessages.map(msg => ({

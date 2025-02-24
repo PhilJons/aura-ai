@@ -154,8 +154,9 @@ const PurePreviewMessage = ({
     <AnimatePresence>
       <motion.div
         className="w-full mx-auto max-w-3xl px-4 group/message"
-        initial={{ y: 5, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        initial={{ y: 5, opacity: 0, x: -5 }}
+        animate={{ y: 0, opacity: 1, x: 0 }}
+        style={{ direction: 'ltr' }}
         data-role={messageWithStableId.role}
         data-message-id={messageWithStableId.id}
       >
@@ -178,7 +179,7 @@ const PurePreviewMessage = ({
 
           <div className="flex flex-col gap-4 w-full">
             {messageWithStableId.experimental_attachments && (
-              <div className="flex flex-row justify-end gap-2">
+              <div className="flex flex-col items-end gap-2 mb-2 w-full">
                 {messageWithStableId.experimental_attachments.map((attachment) => (
                   <PreviewAttachment
                     key={attachment.url}
@@ -220,7 +221,31 @@ const PurePreviewMessage = ({
                       messageWithStableId.role === 'user',
                   })}
                 >
-                  <Markdown>{messageWithStableId.content as string}</Markdown>
+                  <div className="!mb-0">
+                    <Markdown className="[&_*]:!text-inherit [&_p]:!m-0 [&>*:last-child]:!mb-0 [&>*:first-child]:!mt-0">
+                      {(() => {
+                        const content = messageWithStableId.content;
+                        
+                        // If content is already a string, try to parse it as JSON
+                        if (typeof content === 'string') {
+                          try {
+                            const parsed = JSON.parse(content);
+                            return extractTextFromContent(parsed);
+                          } catch {
+                            return content;
+                          }
+                        }
+                        
+                        // If content is an object, try to extract text directly
+                        if (typeof content === 'object' && content !== null) {
+                          return extractTextFromContent(content);
+                        }
+                        
+                        // Fallback to string conversion
+                        return String(content || '');
+                      })()}
+                    </Markdown>
+                  </div>
                 </div>
               </div>
             )}

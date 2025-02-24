@@ -159,6 +159,10 @@ function PureMultimodalInput({
   const [textareaHeight, setTextareaHeight] = useState(40);
 
   const [localStorageInput, setLocalStorageInput] = useLocalStorage("input", "");
+  const [localStorageAttachments, setLocalStorageAttachments] = useLocalStorage<Array<CustomAttachment>>(
+    `chat-${chatId}-attachments`,
+    []
+  );
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -171,6 +175,16 @@ function PureMultimodalInput({
   useEffect(() => {
     setLocalStorageInput(input);
   }, [input, setLocalStorageInput]);
+
+  // Initialize attachments from localStorage
+  useEffect(() => {
+    setAttachments(localStorageAttachments);
+  }, []);
+
+  // Sync attachments with localStorage
+  useEffect(() => {
+    setLocalStorageAttachments(attachments);
+  }, [attachments, setLocalStorageAttachments]);
 
   const handleInput = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(event.target.value);
@@ -197,13 +211,15 @@ function PureMultimodalInput({
       experimental_attachments: processedAttachments,
     });
 
+    // Clear attachments from both state and localStorage
     setAttachments([]);
+    setLocalStorageAttachments([]);
     setLocalStorageInput("");
 
     if (width && width > 768) {
       textareaRef.current?.focus();
     }
-  }, [attachments, handleSubmit, setAttachments, setLocalStorageInput, width, chatId]);
+  }, [attachments, handleSubmit, setAttachments, setLocalStorageAttachments, setLocalStorageInput, width, chatId]);
 
   const uploadFile = useCallback(async (file: File) => {
     const formData = new FormData();

@@ -267,18 +267,22 @@ export async function POST(request: Request) {
         totalTokens += messageTokens;
       }
 
-      const dbUserMessage = {
-        id: userMessageWithImages.id,
-        role: userMessageWithImages.role as DBMessage['role'],
-        content: userMessageWithImages.content,
-        createdAt: new Date().toISOString(),
+      // Save the user message with attachments
+      const dbUserMessage: DBMessage = {
+        id: userMessage.id,
         chatId: id,
-        type: 'message' as const
+        role: userMessage.role,
+        content: userMessage.content,
+        createdAt: new Date().toISOString(),
+        type: 'message',
+        attachments: JSON.stringify(userMessageWithImages.experimental_attachments || [])
       };
 
-      // Save messages to database
+      // Save messages to the database
       await saveMessages({
-        messages: [dbUserMessage, ...newSystemMessages],
+        messages: [{
+          ...dbUserMessage
+        }, ...newSystemMessages],
       });
 
       // Only emit document context update if we have new system messages or images

@@ -24,6 +24,7 @@ export interface Message {
   content: any;
   createdAt: string;
   type: 'message';
+  attachments?: string; // JSON string of attachments
 }
 
 export interface Vote {
