@@ -414,7 +414,7 @@ function PureMultimodalInput({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="absolute inset-0 m-[-2px] bg-gradient-to-br from-blue-950/90 to-blue-900/90 backdrop-blur-[2px] rounded-[var(--radius-lg)] border-2 border-dashed border-blue-400/50 z-50 flex items-center justify-center"
+              className="absolute inset-0 m-[-2px] bg-gradient-to-br from-blue-100/90 to-blue-50/90 dark:from-blue-950/90 dark:to-blue-900/90 backdrop-blur-[2px] rounded-[var(--radius-lg)] border-2 border-dashed border-blue-400/50 dark:border-blue-400/30 z-50 flex items-center justify-center"
             >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -459,10 +459,10 @@ function PureMultimodalInput({
                   </div>
                 </motion.div>
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
+                  <span className="text-lg font-medium text-blue-600 dark:text-blue-300">
                     Drop files to upload
                   </span>
-                  <span className="text-sm text-blue-500/80 dark:text-blue-400/80">
+                  <span className="text-sm text-blue-500/80 dark:text-blue-300/80">
                     Release to add your files
                   </span>
                 </div>
