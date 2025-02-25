@@ -19,7 +19,7 @@ const authOptions: NextAuthConfig = {
       issuer: `https://login.microsoftonline.com/${process.env.AZURE_AD_TENANT_ID}/v2.0`,
       authorization: {
         params: {
-          scope: "openid profile email offline_access User.Read"
+          scope: "openid profile email offline_access User.Read User.ReadBasic.All"
         }
       },
       profilePhotoSize: 48 // Request 48x48 avatar
@@ -43,7 +43,9 @@ const authOptions: NextAuthConfig = {
         const userRecord = await getOrCreateUserByAzureSub(token.sub, token.email as string);
         session.user.id = userRecord.id;
         session.user.name = token.name as string;
-        session.user.image = `https://graph.microsoft.com/v1.0/me/photos/48x48/$value`;
+        
+        // Don't set the image URL directly here, as it requires the access token
+        // The component will handle fetching the image with the token
       }
       if (token.accessToken) {
         session.accessToken = token.accessToken as string;

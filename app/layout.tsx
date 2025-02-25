@@ -71,7 +71,11 @@ export default async function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased">
+      {/* 
+        Add suppressHydrationWarning to the body element to prevent hydration errors 
+        from browser extensions like Grammarly that add attributes to the body
+      */}
+      <body className="antialiased" suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

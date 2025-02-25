@@ -22,30 +22,92 @@ export function SidebarUserNav({ user }: { user: User }) {
   const { setTheme, theme } = useTheme();
   const { data: session } = useSession();
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(user.name || user.email || null);
+  const [isLoadingImage, setIsLoadingImage] = useState(true);
 
   useEffect(() => {
     async function fetchProfilePhoto() {
-      if (session?.accessToken) {
-        try {
-          const response = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
-            headers: {
-              Authorization: `Bearer ${session.accessToken}`
-            }
-          });
-
-          if (response.ok) {
-            const blob = await response.blob();
-            const imageUrl = URL.createObjectURL(blob);
-            setProfileImage(imageUrl);
+      if (!session?.accessToken) {
+        setIsLoadingImage(false);
+        return;
+      }
+      
+      setIsLoadingImage(true);
+      
+      try {
+        // Try the direct photo endpoint first
+        const photoResponse = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`
           }
-        } catch (error) {
-          console.error('Error fetching profile photo:', error);
+        });
+
+        if (photoResponse.ok) {
+          const blob = await photoResponse.blob();
+          const imageUrl = URL.createObjectURL(blob);
+          setProfileImage(imageUrl);
+          setIsLoadingImage(false);
+          return;
         }
+        
+        // If direct photo fails, try the beta endpoint
+        const betaPhotoResponse = await fetch('https://graph.microsoft.com/beta/me/photo/$value', {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`
+          }
+        });
+        
+        if (betaPhotoResponse.ok) {
+          const blob = await betaPhotoResponse.blob();
+          const imageUrl = URL.createObjectURL(blob);
+          setProfileImage(imageUrl);
+          setIsLoadingImage(false);
+          return;
+        }
+        
+        // If both fail, try to use the user.image from the session if available
+        if (user.image) {
+          setProfileImage(user.image);
+        }
+        
+      } catch (error) {
+        console.error('Error fetching profile photo:', error);
+      } finally {
+        setIsLoadingImage(false);
+      }
+    }
+
+    async function fetchUserProfile() {
+      if (!session?.accessToken) return;
+      
+      try {
+        const response = await fetch('https://graph.microsoft.com/v1.0/me', {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`
+          }
+        });
+
+        if (response.ok) {
+          const profile = await response.json();
+          if (profile.displayName) {
+            setUserName(profile.displayName);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
       }
     }
 
     fetchProfilePhoto();
-  }, [session?.accessToken]);
+    fetchUserProfile();
+    
+    // Cleanup function to revoke object URLs to avoid memory leaks
+    return () => {
+      if (profileImage && profileImage.startsWith('blob:')) {
+        URL.revokeObjectURL(profileImage);
+      }
+    };
+  }, [session?.accessToken, user, user.image]);
 
   return (
     <SidebarMenu>
@@ -53,22 +115,23 @@ export function SidebarUserNav({ user }: { user: User }) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent bg-background data-[state=open]:text-sidebar-accent-foreground h-10">
-              {profileImage ? (
+              {!isLoadingImage && profileImage ? (
                 <img
                   src={profileImage}
-                  alt={user.name ?? 'User Avatar'}
+                  alt={userName ?? 'User Avatar'}
                   width={24}
                   height={24}
                   className="rounded-full"
+                  onError={() => setProfileImage(null)}
                 />
               ) : (
                 <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
                   <span className="text-xs font-medium">
-                    {user.name?.charAt(0) ?? user.email?.charAt(0)}
+                    {userName?.charAt(0) ?? user.email?.charAt(0)}
                   </span>
                 </div>
               )}
-              <span className="truncate">{user.name ?? user.email}</span>
+              <span className="truncate">{userName ?? user.email}</span>
               <ChevronUp className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
