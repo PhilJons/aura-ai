@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { signIn } from 'next-auth/react';
+import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 
 // Custom Microsoft icon component
@@ -19,8 +20,15 @@ const MicrosoftIcon = () => (
 
 export default function WelcomePage() {
   const router = useRouter();
+  const { theme, resolvedTheme } = useTheme();
   const [hasSignedInBefore, setHasSignedInBefore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // After mounting, we can safely show the UI that depends on the theme
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     // Check if user has signed in before
@@ -40,6 +48,11 @@ export default function WelcomePage() {
     // Sign in with Microsoft
     await signIn('azure-ad', { callbackUrl: '/' });
   };
+
+  // Determine which logo to use based on the theme
+  const logoSrc = !mounted ? '/images/Aura_logo.svg' : 
+                  (theme === 'dark' || resolvedTheme === 'dark') ? 
+                  '/images/Aura_logo_white.svg' : '/images/Aura_logo.svg';
 
   // Animation variants
   const containerVariants = {
@@ -76,7 +89,7 @@ export default function WelcomePage() {
           className="flex flex-col items-center justify-center gap-6"
         >
           <Image
-            src="/images/Aura_logo.svg"
+            src={logoSrc}
             alt="Aura AI Logo"
             width={180}
             height={60}
@@ -100,7 +113,7 @@ export default function WelcomePage() {
       >
         <motion.div variants={itemVariants} className="flex flex-col items-center justify-center gap-2">
           <Image
-            src="/images/Aura_logo.svg"
+            src={logoSrc}
             alt="Aura AI Logo"
             width={220}
             height={80}
@@ -117,7 +130,7 @@ export default function WelcomePage() {
             variants={itemVariants}
             className="text-center text-muted-foreground mt-2 mb-8 max-w-sm"
           >
-            Your secure intelligent assistant for imporved productivity
+            Your secure intelligent assistant for improved productivity
           </motion.p>
         </motion.div>
 
