@@ -19,7 +19,7 @@ const authOptions: NextAuthConfig = {
       issuer: `https://login.microsoftonline.com/${process.env.AZURE_AD_TENANT_ID}/v2.0`,
       authorization: {
         params: {
-          scope: "openid profile email offline_access User.Read User.ReadBasic.All"
+          scope: "openid profile email User.Read"
         }
       },
       profilePhotoSize: 48 // Request 48x48 avatar
