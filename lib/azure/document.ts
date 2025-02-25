@@ -23,6 +23,9 @@ const client = new DocumentAnalysisClient(
   new AzureKeyCredential(process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY)
 );
 
+// Maximum time to wait for document processing (in milliseconds)
+const MAX_PROCESSING_TIME = 45000; // 45 seconds
+
 export interface ProcessedDocument {
   text: string;
   pages: number;
@@ -33,6 +36,16 @@ export interface ProcessedDocument {
     name?: string;
     contentType?: string;
   }>;
+}
+
+// Helper function to add timeout to promises
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+    })
+  ]);
 }
 
 export async function processDocument(
@@ -56,7 +69,13 @@ export async function processDocument(
       documentBuffer
     );
     logger.document.debug("Waiting for analysis to complete...");
-    const result = await poller.pollUntilDone();
+    
+    // Add timeout to the polling operation
+    const result = await withTimeout(
+      poller.pollUntilDone(),
+      MAX_PROCESSING_TIME,
+      "Document analysis timed out after " + (MAX_PROCESSING_TIME / 1000) + " seconds"
+    );
 
     if (!result) {
       logger.document.error("Document analysis failed - no result returned");
