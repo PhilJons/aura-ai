@@ -60,6 +60,7 @@ function truncateText(text: string, maxTokens: number): string {
 type CustomAttachment = AIAttachment & {
   isAzureExtractedJson?: boolean;
   associatedPdfName?: string;
+  pdfUrl?: string;
 };
 
 function createSystemMessage(attachment: { text: string; metadata?: any; name: string; originalName?: string; pdfUrl?: string }, chatId: string): DBMessage {
@@ -198,12 +199,19 @@ export async function POST(request: Request) {
           if (contentType === 'application/json' && attachment.isAzureExtractedJson) {
             const response = await fetch(url);
             const json = await response.json();
+            
+            // Log the PDF URL for debugging
+            console.log('Processing JSON with PDF content:', { 
+              name, 
+              pdfUrl: json.pdfUrl || attachment.pdfUrl || 'No PDF URL found'
+            });
+            
             validContents.push({
               text: json.text,
               metadata: json.metadata,
               name,
               originalName: json.originalName,
-              pdfUrl: json.pdfUrl
+              pdfUrl: json.pdfUrl || attachment.pdfUrl
             });
             continue;
           }
@@ -213,6 +221,14 @@ export async function POST(request: Request) {
             const response = await fetch(url);
             const buffer = await response.arrayBuffer();
             const result = await processDocument(buffer, contentType, name);
+            
+            // Log the PDF URL for debugging
+            console.log('Processing PDF directly:', { 
+              name, 
+              url,
+              pdfUrl: attachment.pdfUrl || url
+            });
+            
             validContents.push({
               text: result.text,
               metadata: {
@@ -222,7 +238,7 @@ export async function POST(request: Request) {
                 images: result.images
               },
               name,
-              pdfUrl: url
+              pdfUrl: attachment.pdfUrl || url
             });
             continue;
           }

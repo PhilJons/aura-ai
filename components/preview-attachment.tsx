@@ -121,6 +121,7 @@ export const PreviewAttachment = ({
     contentType?: string;
     isAzureExtractedJson?: boolean;
     associatedPdfName?: string;
+    pdfUrl?: string;
   };
   isUploading?: boolean;
   onRemove?: () => void;
@@ -130,17 +131,27 @@ export const PreviewAttachment = ({
     url = "", 
     contentType = "", 
     isAzureExtractedJson = false,
-    associatedPdfName = ""
+    associatedPdfName = "",
+    pdfUrl = ""
   } = attachment;
   const [isImageOverlayOpen, setIsImageOverlayOpen] = useState(false);
   const [isPdfOverlayOpen, setIsPdfOverlayOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [pdfSasUrl, setPdfSasUrl] = useState<string | null>(null);
+  const [isLoadingSas, setIsLoadingSas] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const displayName = name?.split("/").pop() || "Untitled";
 
   const handleRemove = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Ensure the click event doesn't propagate to parent elements
+    // This prevents the attachment from being opened when removing it
+    e.nativeEvent.stopImmediatePropagation();
+    
+    // Call the onRemove callback
     onRemove?.();
   };
 
@@ -158,11 +169,16 @@ export const PreviewAttachment = ({
     return "hover:bg-zinc-100/80 dark:hover:bg-zinc-900/50";
   };
 
-  const handleBoxClick = () => {
+  const handleBoxClick = async () => {
     if (isImage) {
       setIsImageOverlayOpen(true);
     } else if (isPdf) {
-      setIsPdfOverlayOpen(true);
+      // For PDFs, we'll use the pdfUrl if available, or the regular url as fallback
+      const pdfUrlToUse = pdfUrl || url;
+      
+      if (pdfUrlToUse) {
+        setIsPdfOverlayOpen(true);
+      }
     }
   };
 
@@ -272,7 +288,7 @@ export const PreviewAttachment = ({
         </div>
       </div>
 
-      {isImage && (
+      {isImageOverlayOpen && (
         <ImageOverlay
           imageUrl={url}
           altText={displayName}
@@ -281,9 +297,9 @@ export const PreviewAttachment = ({
         />
       )}
 
-      {isPdf && (
+      {isPdfOverlayOpen && (
         <PdfOverlay
-          pdfUrl={url}
+          pdfUrl={pdfUrl || url}
           altText={displayName}
           isOpen={isPdfOverlayOpen}
           onClose={() => setIsPdfOverlayOpen(false)}

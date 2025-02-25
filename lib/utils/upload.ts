@@ -164,7 +164,8 @@ export async function uploadFile(file: File) {
         
         logger.upload.debug('JSON uploaded successfully', {
           url: jsonUploadData.url,
-          jsonFilename
+          jsonFilename,
+          pdfUrl: rawMimeType === 'application/pdf' ? rawUploadData.url : undefined
         });
 
         // Add second item to attachments with proper linking to original file

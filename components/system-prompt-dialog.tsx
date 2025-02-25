@@ -16,6 +16,7 @@ import { useEffect, useState, useCallback } from 'react';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
 import { cn } from '@/lib/utils';
+import { logger } from "@/lib/utils/logger";
 
 interface DocumentFile {
   id?: string; // Message ID for the system message
@@ -74,6 +75,8 @@ function formatFileType(fileType: string | undefined): string {
 function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileContentProps) {
   const [isOpen, setIsOpen] = useState(false);
   const FileIcon = getFileIcon(file.metadata?.fileType);
+  const [isLoadingSas, setIsLoadingSas] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleRemove = useCallback(async (fileToRemove: DocumentFile) => {
     await onRemove(fileToRemove);
@@ -87,6 +90,66 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
 
   // Check if the file is a PDF
   const isPdf = file.metadata?.fileType?.toLowerCase().includes('pdf') || file.metadata?.fileType === 'application/pdf';
+
+  const handleViewPdf = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!file.metadata?.url) return;
+    
+    try {
+      setIsLoadingSas(true);
+      setError(null);
+      
+      // Extract the blob name from the URL
+      const blobNameMatch = file.metadata.url.match(/\/([^/?]+)(?:\?|$)/);
+      const blobName = blobNameMatch ? blobNameMatch[1] : null;
+      
+      if (!blobName) {
+        throw new Error("Could not extract blob name from PDF URL");
+      }
+      
+      logger.document.debug('Requesting fresh SAS URL for PDF in document context', {
+        blobName,
+        pdfUrl: file.metadata.url
+      });
+      
+      const response = await fetch('/api/files/pdf-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ blobName }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || response.statusText);
+      }
+      
+      const data = await response.json();
+      
+      logger.document.debug('Received fresh SAS URL for PDF in document context', {
+        blobName,
+        sasUrl: data.sasUrl.substring(0, 50) + '...'
+      });
+      
+      // Open the PDF with the fresh SAS URL
+      window.open(data.sasUrl, "_blank");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.document.error('Error getting fresh SAS URL for PDF in document context', {
+        error: errorMessage,
+        pdfUrl: file.metadata.url
+      });
+      setError(errorMessage);
+      
+      // Fallback to the original URL
+      window.open(file.metadata.url, "_blank");
+    } finally {
+      setIsLoadingSas(false);
+    }
+  };
 
   return (
     <Collapsible.Root open={isOpen} onOpenChange={setIsOpen} className="w-full">
@@ -108,17 +171,11 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-6 px-2 text-xs"
-                asChild
+                className={cn("h-6 px-2 text-xs", isLoadingSas && "opacity-70")}
+                onClick={handleViewPdf}
+                disabled={isLoadingSas}
               >
-                <a 
-                  href={file.metadata.url} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  View PDF
-                </a>
+                {isLoadingSas ? "Loading..." : "View PDF"}
               </Button>
             )}
           </div>
@@ -126,6 +183,11 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
             <span className="text-xs text-muted-foreground ml-8">
               {metadataDisplay}
             </span>
+          )}
+          {error && (
+            <div className="text-xs text-red-500 dark:text-red-400 ml-8 mt-1">
+              Error: {error}
+            </div>
           )}
         </div>
         <Button

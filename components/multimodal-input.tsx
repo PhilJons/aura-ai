@@ -27,6 +27,10 @@ import { usePathname } from 'next/navigation';
 
 import { sanitizeUIMessages } from "@/lib/utils";
 import equal from "fast-deep-equal";
+import { logger } from "@/lib/utils/logger";
+import { useDirectFileUpload } from "@/components/ui/direct-file-upload";
+import { cn } from "@/lib/utils";
+import { UploadProgress } from "@/components/upload-progress";
 
 // Icons
 function ArrowUpIcon({ size = 16 }: { size?: number }) {
@@ -184,12 +188,26 @@ function PureMultimodalInput({
   // Initialize attachments from localStorage
   useEffect(() => {
     setAttachments(localStorageAttachments);
-  }, []);
+  }, [localStorageAttachments, setAttachments]);
 
   // Sync attachments with localStorage
   useEffect(() => {
-    setLocalStorageAttachments(attachments);
-  }, [attachments, setLocalStorageAttachments]);
+    // Only update localStorage if attachments have changed
+    if (!equal(attachments, localStorageAttachments)) {
+      setLocalStorageAttachments(attachments);
+    }
+  }, [attachments, localStorageAttachments, setLocalStorageAttachments]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Clear attachments from localStorage when component unmounts
+      // but only if we're not in the middle of a chat
+      if (!isLoading && !isExistingChat) {
+        setLocalStorageAttachments([]);
+      }
+    };
+  }, [isLoading, isExistingChat, setLocalStorageAttachments]);
 
   const handleInput = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(event.target.value);
@@ -198,18 +216,103 @@ function PureMultimodalInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
   const [isDragging, setIsDragging] = useState(false);
+  
+  const { uploadFile, isUploading, uploadProgress } = useDirectFileUpload({
+    chatId,
+    onUploadStart: () => {
+      console.log("Upload started");
+      setIsProcessingFile(true);
+    },
+    onUploadComplete: (result) => {
+      console.log("Upload complete", result);
+      if (result.success && result.attachments) {
+        const newAttachments = result.attachments || [];
+        setAttachments((prev) => [...prev, ...newAttachments]);
+      }
+      setIsProcessingFile(false);
+      setUploadQueue((prev) => prev.slice(1));
+    },
+    onUploadError: (error) => {
+      console.error("Upload error", error);
+      setIsProcessingFile(false);
+      setUploadQueue((prev) => prev.slice(1));
+    },
+    debug: false // Disable debug toasts
+  });
+
+  const handleAttachmentClick = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }, []);
+
+  const handleFileInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      
+      // Process files sequentially to avoid overwhelming the server
+      for (const file of files) {
+        try {
+          await uploadFile(file);
+        } catch (error) {
+          console.error(`Error uploading file: ${file.name}`, error);
+          toast.error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+      
+      // Reset the input value so the same file can be uploaded again if needed
+      e.target.value = '';
+    }
+  }, [uploadFile]);
+
+  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      
+      // Process files sequentially to avoid overwhelming the server
+      for (const file of files) {
+        try {
+          await uploadFile(file);
+        } catch (error) {
+          console.error(`Error uploading file: ${file.name}`, error);
+          toast.error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+    }
+  }, [uploadFile, setIsDragging]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    handleFileDrop(e);
+  }, [handleFileDrop]);
 
   const submitForm = useCallback(() => {
     window.history.replaceState({}, "", `/chat/${chatId}`);
 
+    // Only process attachments that are currently in the state
+    // This ensures removed attachments don't get included
+    const currentAttachments = [...attachments];
+    
     // Filter attachments to only use the extracted text for PDFs and text files
-    const processedAttachments = attachments.filter(attachment => {
+    const processedAttachments = currentAttachments.filter(attachment => {
       // Skip the raw PDF/text files, we'll use their extracted JSON instead
       if (attachment.associatedPdfName) {
         return false;
       }
       // Keep the extracted JSON and other supported file types
       return true;
+    }).map(attachment => {
+      // Ensure pdfUrl is included if it exists
+      if (attachment.pdfUrl) {
+        return {
+          ...attachment,
+          pdfUrl: attachment.pdfUrl
+        };
+      }
+      return attachment;
     });
 
     handleSubmit(undefined, {
@@ -225,74 +328,6 @@ function PureMultimodalInput({
       textareaRef.current?.focus();
     }
   }, [attachments, handleSubmit, setAttachments, setLocalStorageAttachments, setLocalStorageInput, width, chatId]);
-
-  const uploadFile = useCallback(async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("chatId", chatId);
-
-    console.log(`Starting upload for file: ${file.name}, size: ${(file.size / (1024 * 1024)).toFixed(2)}MB, type: ${file.type}`);
-
-    try {
-      // Set a timeout for the fetch request
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.error(`Upload timeout for ${file.name} after 60 seconds`);
-        controller.abort();
-      }, 60000); // 60 second timeout
-      
-      console.log(`Sending file to server: ${file.name}`);
-      
-      const response = await fetch("/api/files/upload", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal
-      });
-      
-      // Clear the timeout
-      clearTimeout(timeoutId);
-
-      console.log(`Server response for ${file.name}: ${response.status} ${response.statusText}`);
-
-      if (response.ok) {
-        const attachments = await response.json();
-        console.log(`Upload successful for ${file.name}, received ${attachments.length} attachments`);
-        // Return all attachments from the server (both PDF and extracted text)
-        return attachments;
-      }
-      
-      // Handle error responses
-      try {
-        const errorData = await response.json();
-        console.error(`Upload error for ${file.name}:`, errorData);
-        throw new Error(errorData.error || errorData.details || `Upload failed with status: ${response.status}`);
-      } catch (jsonError) {
-        // If we can't parse the error as JSON, use the status text
-        console.error(`Failed to parse error response for ${file.name}: ${response.statusText || response.status}`);
-        throw new Error(`Upload failed: ${response.statusText || response.status}`);
-      }
-    } catch (error) {
-      // Handle abort errors specifically
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        console.error(`Upload timed out for ${file.name} after 60 seconds`);
-        toast.error(`Upload timed out for ${file.name}. Please try again with a smaller file or check your network connection.`);
-        throw new Error('Upload timed out. Please try again with a smaller file or check your network connection.');
-      }
-      
-      // Handle network errors
-      if (error instanceof TypeError && error.message.includes('network')) {
-        console.error(`Network error during upload of ${file.name}: ${error.message}`);
-        toast.error(`Network error during upload. Please check your internet connection and try again.`);
-        throw new Error('Network error during upload. Please check your internet connection and try again.');
-      }
-      
-      // Log all other errors
-      console.error(`Error uploading ${file.name}:`, error);
-      
-      // Re-throw other errors
-      throw error;
-    }
-  }, [chatId]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -327,97 +362,69 @@ function PureMultimodalInput({
     e.stopPropagation();
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
+  const handleRemoveAttachment = useCallback(async (attachmentToRemove: CustomAttachment) => {
+    console.log("Removing attachment:", attachmentToRemove.name || attachmentToRemove.url);
     
-    if (!selectedChatModel) {
-      toast.error("Please select a chat model first");
-      return;
+    // Create a new array without the removed attachment
+    const updatedAttachments = attachments.filter(
+      (attachment) => attachment.url !== attachmentToRemove.url
+    );
+    
+    // Also remove any associated JSON files that were extracted from this PDF
+    // or any PDF files that this JSON was extracted from
+    const fullyUpdatedAttachments = updatedAttachments.filter(attachment => {
+      // Remove JSON files extracted from this PDF
+      if (attachment.associatedPdfName === attachmentToRemove.name) {
+        return false;
+      }
+      
+      // Remove PDF files that this JSON was extracted from
+      if (attachmentToRemove.associatedPdfName && 
+          attachment.name === attachmentToRemove.associatedPdfName) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    // Update both state and localStorage directly
+    setAttachments(fullyUpdatedAttachments);
+    setLocalStorageAttachments(fullyUpdatedAttachments);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
     
-    const files = Array.from(e.dataTransfer.files);
-    const validFiles = files.filter(file => validateFileType(file, selectedChatModel));
-    
-    if (validFiles.length === 0) return;
-    
-    setIsProcessingFile(true);
-    setUploadQueue(prev => [...prev, ...validFiles.map(f => f.name)]);
-    
-    try {
-      // Process files sequentially instead of in parallel
-      for (const file of validFiles) {
-        try {
-          toast.info(`Processing ${file.name}. This may take a moment...`);
-          console.log(`Processing file: ${file.name}`);
+    // If this is a PDF file that has been processed, we should also try to clean up the server-side
+    if (attachmentToRemove.contentType === "application/pdf" || 
+        (attachmentToRemove.contentType === "application/json" && attachmentToRemove.associatedPdfName)) {
+      try {
+        // Attempt to notify the server to clean up any processed files
+        const blobName = attachmentToRemove.url?.split('/').pop()?.split('?')[0];
+        if (blobName) {
+          const response = await fetch('/api/files/cleanup', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              blobName,
+              chatId
+            }),
+          });
           
-          const result = await uploadFile(file);
-          
-          if (result) {
-            setAttachments(prev => [...prev, ...result]);
-            console.log(`File processed successfully: ${file.name}`);
-            toast.success(`${file.name} uploaded successfully`);
+          if (!response.ok) {
+            console.error("Failed to clean up processed files:", await response.text());
           }
-        } catch (error) {
-          console.error(`Error processing file ${file.name}:`, error);
-          toast.error(`Failed to upload ${file.name}. ${error instanceof Error ? error.message : 'Unknown error'}`);
-        } finally {
-          // Remove from upload queue after processing (success or failure)
-          setUploadQueue(prev => prev.filter(name => name !== file.name));
         }
-      }
-    } catch (error) {
-      console.error('Error processing files:', error);
-      toast.error(`Error processing files: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsProcessingFile(false);
-    }
-  }, [selectedChatModel, setAttachments, uploadFile, setIsProcessingFile]);
-
-  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.length) return;
-    
-    const files = Array.from(e.target.files);
-    const validFiles = files.filter(file => validateFileType(file, selectedChatModel));
-    
-    if (validFiles.length === 0) return;
-    
-    setIsProcessingFile(true);
-    setUploadQueue(prev => [...prev, ...validFiles.map(f => f.name)]);
-    
-    try {
-      // Process files sequentially instead of in parallel
-      for (const file of validFiles) {
-        try {
-          toast.info(`Processing ${file.name}. This may take a moment...`);
-          console.log(`Processing file: ${file.name}`);
-          
-          const result = await uploadFile(file);
-          
-          if (result) {
-            setAttachments(prev => [...prev, ...result]);
-            console.log(`File processed successfully: ${file.name}`);
-            toast.success(`${file.name} uploaded successfully`);
-          }
-        } catch (error) {
-          console.error(`Error processing file ${file.name}:`, error);
-          toast.error(`Failed to upload ${file.name}. ${error instanceof Error ? error.message : 'Unknown error'}`);
-        } finally {
-          // Remove from upload queue after processing (success or failure)
-          setUploadQueue(prev => prev.filter(name => name !== file.name));
-        }
-      }
-    } catch (error) {
-      console.error('Error processing files:', error);
-      toast.error(`Error processing files: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsProcessingFile(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      } catch (error) {
+        console.error("Error cleaning up processed files:", error);
       }
     }
-  }, [selectedChatModel, setAttachments, uploadFile, setIsProcessingFile]);
+    
+    console.log("Attachment removed:", attachmentToRemove.name || attachmentToRemove.url);
+  }, [attachments, setLocalStorageAttachments, chatId]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">
@@ -430,42 +437,50 @@ function PureMultimodalInput({
         )}
 
       <input
+        ref={fileInputRef}
         type="file"
         className="hidden"
-        ref={fileInputRef}
+        onChange={handleFileInputChange}
+        accept="image/png,image/jpeg,image/webp,application/pdf"
         multiple
-        onChange={handleFileChange}
-        tabIndex={-1}
       />
 
-      {(attachments.length > 0 || uploadQueue.length > 0) && (
-        <div className="flex flex-wrap gap-2 items-start py-2 px-1">
-          {attachments.map((attachment, index) => (
-            <PreviewAttachment
-              key={`${attachment.url || attachment.name || index}`}
-              attachment={attachment}
-              onRemove={() => {
-                setAttachments((currentAttachments) =>
-                  currentAttachments.filter((a) => a.url !== attachment.url),
-                );
-                if (fileInputRef.current) {
-                  fileInputRef.current.value = "";
-                }
-              }}
-            />
-          ))}
-
-          {uploadQueue.map((filename) => (
-            <PreviewAttachment
-              key={`uploading-${filename}`}
-              attachment={{
-                url: "",
-                name: filename,
-                contentType: "",
-              }}
-              isUploading={true}
-            />
-          ))}
+      {(attachments.length > 0 || uploadQueue.length > 0 || Object.keys(uploadProgress).length > 0) && (
+        <div className="flex flex-col gap-2">
+          {/* Display files currently being uploaded with progress */}
+          {Object.keys(uploadProgress).length > 0 && <UploadProgress uploadProgress={uploadProgress} />}
+          
+          {/* Display files in upload queue */}
+          {uploadQueue.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="text-sm text-muted-foreground">
+                Files in queue: {uploadQueue.length}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {uploadQueue.map((filename) => (
+                  <div
+                    key={filename}
+                    className="flex items-center gap-2 px-2 py-1 bg-muted rounded-md text-xs"
+                  >
+                    <span className="truncate max-w-[150px]">{filename}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Display already uploaded attachments */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {attachments.map((attachment, index) => (
+                <PreviewAttachment
+                  key={`${attachment.url || attachment.name || index}`}
+                  attachment={attachment}
+                  onRemove={() => handleRemoveAttachment(attachment)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -613,10 +628,14 @@ function PureMultimodalInput({
           <div className="flex w-full items-center justify-between">
             <div className="flex items-center">
               <AttachmentsButton
-                fileInputRef={fileInputRef}
-                isLoading={isLoading}
-                selectedChatModel={selectedChatModel}
-              />
+                className={cn(
+                  "absolute bottom-1 left-1 z-10 sm:left-2"
+                )}
+                onClick={handleAttachmentClick}
+                disabled={isLoading}
+              >
+                <PlusIcon size={16} />
+              </AttachmentsButton>
             </div>
 
             <div className="flex items-center">
@@ -645,38 +664,33 @@ export const MultimodalInput = memo(PureMultimodalInput, (prevProps, nextProps) 
 });
 
 function PureAttachmentsButton({
-  fileInputRef,
-  isLoading,
-  selectedChatModel,
+  className,
+  onClick,
+  disabled,
+  children
 }: {
-  fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
-  isLoading: boolean;
-  selectedChatModel: string;
+  className?: string;
+  onClick: () => void;
+  disabled: boolean;
+  children?: React.ReactNode;
 }) {
-  const isGPT4oMini = selectedChatModel === "chat-model-small";
-
   return (
     <button
       type="button"
-      className={cx(
-        "flex items-center justify-center w-8 h-8 p-0 rounded-full",
-        "border border-zinc-200 dark:border-zinc-800",
+      className={cn(
+        "flex h-8 w-8 items-center justify-center rounded-full p-0",
         "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
         "text-zinc-600 dark:text-zinc-400",
+        "border border-zinc-200 dark:border-zinc-800",
         "transition-colors duration-200",
-        "[&_svg]:size-4 [&_svg]:shrink-0"
+        "disabled:opacity-40 disabled:hover:bg-background dark:disabled:hover:bg-zinc-900",
+        "[&_svg]:size-4 [&_svg]:shrink-0",
+        className
       )}
-      onClick={(event) => {
-        event.preventDefault();
-        if (!selectedChatModel) {
-          toast.error("Please select a chat model first");
-          return;
-        }
-        fileInputRef.current?.click();
-      }}
-      disabled={isLoading}
+      onClick={onClick}
+      disabled={disabled}
     >
-      <PlusIcon size={16} />
+      {children || <PlusIcon size={16} />}
     </button>
   );
 }
