@@ -13,6 +13,7 @@ export default auth((req) => {
     '/auth/',
     '/images/',
     '/favicon.ico',
+    '/login',
   ];
 
   // Check if the path is public
@@ -25,9 +26,8 @@ export default auth((req) => {
   // Protect all other routes
   if (!isLoggedIn) {
     console.log(`[Middleware] Redirecting unauthenticated user to login from ${nextUrl.pathname}`);
-    const signInUrl = new URL('/api/auth/signin', nextUrl);
-    signInUrl.searchParams.set('callbackUrl', nextUrl.pathname);
-    return Response.redirect(signInUrl);
+    const loginUrl = new URL('/login', nextUrl);
+    return Response.redirect(loginUrl);
   }
 
   // Add debugging logs
