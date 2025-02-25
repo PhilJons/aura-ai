@@ -1,4 +1,3 @@
-"use server";
 import { z } from "zod";
 
 import { auth } from "@/app/(auth)/auth";
