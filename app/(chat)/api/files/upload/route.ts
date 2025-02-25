@@ -4,6 +4,7 @@ import { auth } from "@/app/(auth)/auth";
 import { uploadFile } from '@/lib/utils/upload';
 import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
 import { logger } from "@/lib/utils/logger";
+import { uploadBlob } from '@/lib/azure/blob';
 
 // Increase max file size to 30MB
 const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB
@@ -89,14 +90,24 @@ export async function POST(request: Request) {
     try {
       // For PDFs, log that we're starting the processing
       if (file.type === 'application/pdf') {
-        logger.document.info('Starting PDF processing', {
-          filename: file.name,
-          fileSize: file.size,
-          chatId
+        logger.document.info('Starting document processing', {
+          mimeType: file.type,
+          filename: file.name
         });
       }
 
-      const attachments = await uploadFile(file);
+      // Set a timeout for the entire upload process
+      const uploadPromise = uploadFile(file);
+      
+      // Use Promise.race to implement a timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Upload processing timed out'));
+        }, 50000); // 50 second timeout (just under Vercel's 60s limit)
+      });
+      
+      // Race the upload against the timeout
+      const attachments = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
       // Mark upload complete
       markFileUploadComplete(chatId);
@@ -119,6 +130,44 @@ export async function POST(request: Request) {
         filename: file.name,
         chatId
       });
+      
+      // For PDF files, if processing fails, return just the raw file as a fallback
+      if (file.type === 'application/pdf') {
+        try {
+          logger.upload.info('Attempting fallback to raw PDF upload', {
+            filename: file.name
+          });
+          
+          const arrayBuf = await file.arrayBuffer();
+          const buf = Buffer.from(arrayBuf);
+          
+          // Upload the raw file
+          const uniqueId = crypto.randomUUID();
+          const uniqueFilename = `${uniqueId}-${file.name}`;
+          
+          const rawUploadData = await uploadBlob(uniqueFilename, buf, file.type);
+          
+          const fallbackAttachments = [{
+            url: rawUploadData.url,
+            name: file.name,
+            contentType: file.type,
+            originalName: file.name
+          }];
+          
+          logger.upload.info('Fallback to raw PDF successful', {
+            filename: file.name
+          });
+          
+          return new Response(JSON.stringify(fallbackAttachments), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } catch (fallbackError) {
+          logger.upload.error('Fallback upload also failed', {
+            error: fallbackError instanceof Error ? fallbackError.message : 'Unknown error',
+            filename: file.name
+          });
+        }
+      }
       
       throw error;
     }

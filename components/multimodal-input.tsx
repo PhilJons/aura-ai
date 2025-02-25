@@ -232,20 +232,41 @@ function PureMultimodalInput({
     formData.append("chatId", chatId);
 
     try {
+      // Set a timeout for the fetch request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      
       const response = await fetch("/api/files/upload", {
         method: "POST",
         body: formData,
+        signal: controller.signal
       });
+      
+      // Clear the timeout
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const attachments = await response.json();
         // Return all attachments from the server (both PDF and extracted text)
         return attachments;
       }
-      const { error } = await response.json();
-      toast.error(error);
+      
+      // Handle error responses
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.error || errorData.details || `Upload failed with status: ${response.status}`);
+      } catch (jsonError) {
+        // If we can't parse the error as JSON, use the status text
+        throw new Error(`Upload failed: ${response.statusText || response.status}`);
+      }
     } catch (error) {
-      toast.error("Failed to upload file, please try again!");
+      // Handle abort errors specifically
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error('Upload timed out. Please try again with a smaller file.');
+      }
+      
+      // Re-throw other errors
+      throw error;
     }
   }, [chatId]);
 
@@ -301,16 +322,36 @@ function PureMultimodalInput({
       setUploadQueue(files.map((file) => file.name));
       setIsProcessingFile(true);
 
-      const uploadPromises = files.map((file) => uploadFile(file));
-      const uploadResults = await Promise.all(uploadPromises);
-      const successfullyUploadedAttachments = uploadResults
-        .filter(Boolean)
-        .flat();
+      // Process files one by one to avoid overwhelming the server
+      const successfullyUploadedAttachments: CustomAttachment[] = [];
+      
+      for (const file of files) {
+        try {
+          // Add special handling for PDFs
+          if (file.type === 'application/pdf') {
+            toast.info(`Processing PDF: ${file.name}. This may take a moment...`);
+          }
+          
+          const result = await uploadFile(file);
+          if (result) {
+            successfullyUploadedAttachments.push(...result);
+          }
+        } catch (fileError) {
+          console.error(`Error uploading ${file.name}:`, fileError);
+          toast.error(`Failed to upload ${file.name}. ${fileError instanceof Error ? fileError.message : 'Please try again.'}`);
+        }
+      }
 
-      setAttachments((currentAttachments) => [
-        ...currentAttachments,
-        ...successfullyUploadedAttachments,
-      ]);
+      if (successfullyUploadedAttachments.length > 0) {
+        setAttachments((currentAttachments) => [
+          ...currentAttachments,
+          ...successfullyUploadedAttachments,
+        ]);
+        
+        if (files.some(f => f.type === 'application/pdf')) {
+          toast.success('PDF uploaded successfully!');
+        }
+      }
     } catch (error) {
       if (error instanceof Error) {
         toast.error(error.message);
@@ -335,16 +376,36 @@ function PureMultimodalInput({
         setUploadQueue(files.map((file) => file.name));
         setIsProcessingFile(true);
 
-        const uploadPromises = files.map((file) => uploadFile(file));
-        const uploadResults = await Promise.all(uploadPromises);
-        const successfullyUploadedAttachments = uploadResults
-          .filter(Boolean)
-          .flat();
+        // Process files one by one to avoid overwhelming the server
+        const successfullyUploadedAttachments: CustomAttachment[] = [];
+        
+        for (const file of files) {
+          try {
+            // Add special handling for PDFs
+            if (file.type === 'application/pdf') {
+              toast.info(`Processing PDF: ${file.name}. This may take a moment...`);
+            }
+            
+            const result = await uploadFile(file);
+            if (result) {
+              successfullyUploadedAttachments.push(...result);
+            }
+          } catch (fileError) {
+            console.error(`Error uploading ${file.name}:`, fileError);
+            toast.error(`Failed to upload ${file.name}. ${fileError instanceof Error ? fileError.message : 'Please try again.'}`);
+          }
+        }
 
-        setAttachments((currentAttachments) => [
-          ...currentAttachments,
-          ...successfullyUploadedAttachments,
-        ]);
+        if (successfullyUploadedAttachments.length > 0) {
+          setAttachments((currentAttachments) => [
+            ...currentAttachments,
+            ...successfullyUploadedAttachments,
+          ]);
+          
+          if (files.some(f => f.type === 'application/pdf')) {
+            toast.success('PDF uploaded successfully!');
+          }
+        }
       } catch (error) {
         if (error instanceof Error) {
           toast.error(error.message);
@@ -355,6 +416,11 @@ function PureMultimodalInput({
       } finally {
         setUploadQueue([]);
         setIsProcessingFile(false);
+        
+        // Clear the file input to allow re-uploading the same file
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     },
     [selectedChatModel, setAttachments, uploadFile, setIsProcessingFile],
