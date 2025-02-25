@@ -1,6 +1,6 @@
 # AI Chatbot
 
-A modern, feature-rich AI chatbot built with Next.js 14, leveraging multiple AI models including Azure OpenAI 4o and 4o-mini. This application provides an interactive chat interface with support for multiple AI models, file uploads, and real-time conversations.
+A modern, AI chatbot built with Next.js 14, leveraging multiple AI models, including Azure OpenAI 4o and 4o-mini. This application provides an interactive chat interface with support for multiple AI models, file uploads, and real-time conversations.
 
 ## Features
 
@@ -17,7 +17,7 @@ A modern, feature-rich AI chatbot built with Next.js 14, leveraging multiple AI 
 - **Framework**: Next.js 14
 - **Language**: TypeScript
 - **Database**: Azure Cosmos DB
-- **Authentication**: Built-in auth system
+- **Authentication**: Azure Entra ID
 - **AI Integration**: Azure OpenAI
 - **Storage**: Azure Blob Storage
 - **UI Components**: Radix UI
@@ -72,4 +72,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-Built with ❤️ using Vercel, Next.js, and Azure
+Built with ❤️ using Cursor, Claude, Vercel, Next.js, and Azure
