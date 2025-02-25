@@ -179,7 +179,12 @@ const PurePreviewMessage = ({
 
           <div className="flex flex-col gap-4 w-full">
             {messageWithStableId.experimental_attachments && (
-              <div className="flex flex-col items-end gap-2 mb-2 w-full">
+              <div className={cn(
+                "flex flex-col gap-2 mb-2",
+                messageWithStableId.role === 'user' 
+                  ? "items-end self-end max-w-[300px]" 
+                  : "items-start w-full"
+              )}>
                 {messageWithStableId.experimental_attachments.map((attachment) => (
                   <PreviewAttachment
                     key={attachment.url}
@@ -197,7 +202,12 @@ const PurePreviewMessage = ({
             )}
 
             {(messageWithStableId.content || messageWithStableId.reasoning) && mode === 'view' && (
-              <div className="flex flex-row gap-2 items-start">
+              <div className={cn(
+                "flex flex-row gap-2 items-start",
+                messageWithStableId.role === 'user' && messageWithStableId.experimental_attachments?.length 
+                  ? "self-end max-w-[300px]" 
+                  : ""
+              )}>
                 {messageWithStableId.role === 'user' && !isReadonly && (
                   <Tooltip>
                     <TooltipTrigger asChild>

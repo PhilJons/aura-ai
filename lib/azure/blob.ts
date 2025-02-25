@@ -23,7 +23,7 @@ const containerClient = blobServiceClient.getContainerClient(
   process.env.AZURE_STORAGE_CONTAINER_NAME
 );
 
-function generateSasUrl(blobName: string): string {
+export function generateSasUrl(blobName: string): string {
   logger.blob.debug('Generating SAS URL', { 
     blobName,
     timestamp: new Date().toISOString()

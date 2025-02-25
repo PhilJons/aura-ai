@@ -1,7 +1,7 @@
 import { auth } from "@/app/(auth)/auth";
 import { logger } from "@/lib/utils/logger";
 import { processDocument } from "@/lib/azure/document";
-import { uploadBlob } from "@/lib/azure/blob";
+import { uploadBlob, generateSasUrl } from "@/lib/azure/blob";
 import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
 import { BlobServiceClient } from "@azure/storage-blob";
 
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
         pdfUrl?: string;
       }> = [
         {
-          url: `https://${process.env.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${process.env.AZURE_STORAGE_CONTAINER_NAME}/${blobName}`,
+          url: generateSasUrl(blobName),
           name: originalFilename,
           contentType: contentType,
           originalName: originalFilename
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
             textLength: processed.text.length
           });
           
-          const pdfUrl = `https://${process.env.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${process.env.AZURE_STORAGE_CONTAINER_NAME}/${blobName}`;
+          const pdfUrl = generateSasUrl(blobName);
           
           const docString = JSON.stringify({
             text: processed.text,

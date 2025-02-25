@@ -13,6 +13,11 @@ const nextConfig = {
         protocol: 'https',
         pathname: '/ai-chatbot-files/**',
       },
+      {
+        hostname: '*.blob.core.windows.net',
+        protocol: 'https',
+        pathname: '/**',
+      },
     ],
   },
 };
