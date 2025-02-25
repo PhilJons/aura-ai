@@ -117,7 +117,7 @@ export default function WelcomePage() {
             variants={itemVariants}
             className="text-center text-muted-foreground mt-2 mb-8 max-w-sm"
           >
-            Your intelligent assistant for seamless productivity
+            Your secure intelligent assistant for imporved productivity
           </motion.p>
         </motion.div>
 
