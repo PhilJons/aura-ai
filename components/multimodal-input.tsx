@@ -331,124 +331,93 @@ function PureMultimodalInput({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-
+    
     if (!selectedChatModel) {
       toast.error("Please select a chat model first");
       return;
     }
-
+    
     const files = Array.from(e.dataTransfer.files);
+    const validFiles = files.filter(file => validateFileType(file, selectedChatModel));
+    
+    if (validFiles.length === 0) return;
+    
+    setIsProcessingFile(true);
+    setUploadQueue(prev => [...prev, ...validFiles.map(f => f.name)]);
     
     try {
-      // Validate all files first
-      files.forEach(file => validateFileType(file, selectedChatModel));
-      
-      setUploadQueue(files.map((file) => file.name));
-      setIsProcessingFile(true);
-
-      // Process files one by one to avoid overwhelming the server
-      const successfullyUploadedAttachments: CustomAttachment[] = [];
-      
-      for (const file of files) {
+      // Process files sequentially instead of in parallel
+      for (const file of validFiles) {
         try {
-          // Add special handling for PDFs
-          if (file.type === 'application/pdf') {
-            toast.info(`Processing PDF: ${file.name}. This may take a moment...`);
-          }
+          toast.info(`Processing ${file.name}. This may take a moment...`);
+          console.log(`Processing file: ${file.name}`);
           
           const result = await uploadFile(file);
+          
           if (result) {
-            successfullyUploadedAttachments.push(...result);
+            setAttachments(prev => [...prev, ...result]);
+            console.log(`File processed successfully: ${file.name}`);
+            toast.success(`${file.name} uploaded successfully`);
           }
-        } catch (fileError) {
-          console.error(`Error uploading ${file.name}:`, fileError);
-          toast.error(`Failed to upload ${file.name}. ${fileError instanceof Error ? fileError.message : 'Please try again.'}`);
-        }
-      }
-
-      if (successfullyUploadedAttachments.length > 0) {
-        setAttachments((currentAttachments) => [
-          ...currentAttachments,
-          ...successfullyUploadedAttachments,
-        ]);
-        
-        if (files.some(f => f.type === 'application/pdf')) {
-          toast.success('PDF uploaded successfully!');
+        } catch (error) {
+          console.error(`Error processing file ${file.name}:`, error);
+          toast.error(`Failed to upload ${file.name}. ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+          // Remove from upload queue after processing (success or failure)
+          setUploadQueue(prev => prev.filter(name => name !== file.name));
         }
       }
     } catch (error) {
-      if (error instanceof Error) {
-        toast.error(error.message);
-      } else {
-        console.error("Error uploading files!", error);
-        toast.error("Failed to upload files!");
-      }
+      console.error('Error processing files:', error);
+      toast.error(`Error processing files: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setUploadQueue([]);
       setIsProcessingFile(false);
     }
   }, [selectedChatModel, setAttachments, uploadFile, setIsProcessingFile]);
 
-  const handleFileChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files || []);
-      
-      try {
-        // Validate all files first
-        files.forEach(file => validateFileType(file, selectedChatModel));
-        
-        setUploadQueue(files.map((file) => file.name));
-        setIsProcessingFile(true);
-
-        // Process files one by one to avoid overwhelming the server
-        const successfullyUploadedAttachments: CustomAttachment[] = [];
-        
-        for (const file of files) {
-          try {
-            // Add special handling for PDFs
-            if (file.type === 'application/pdf') {
-              toast.info(`Processing PDF: ${file.name}. This may take a moment...`);
-            }
-            
-            const result = await uploadFile(file);
-            if (result) {
-              successfullyUploadedAttachments.push(...result);
-            }
-          } catch (fileError) {
-            console.error(`Error uploading ${file.name}:`, fileError);
-            toast.error(`Failed to upload ${file.name}. ${fileError instanceof Error ? fileError.message : 'Please try again.'}`);
-          }
-        }
-
-        if (successfullyUploadedAttachments.length > 0) {
-          setAttachments((currentAttachments) => [
-            ...currentAttachments,
-            ...successfullyUploadedAttachments,
-          ]);
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    
+    const files = Array.from(e.target.files);
+    const validFiles = files.filter(file => validateFileType(file, selectedChatModel));
+    
+    if (validFiles.length === 0) return;
+    
+    setIsProcessingFile(true);
+    setUploadQueue(prev => [...prev, ...validFiles.map(f => f.name)]);
+    
+    try {
+      // Process files sequentially instead of in parallel
+      for (const file of validFiles) {
+        try {
+          toast.info(`Processing ${file.name}. This may take a moment...`);
+          console.log(`Processing file: ${file.name}`);
           
-          if (files.some(f => f.type === 'application/pdf')) {
-            toast.success('PDF uploaded successfully!');
+          const result = await uploadFile(file);
+          
+          if (result) {
+            setAttachments(prev => [...prev, ...result]);
+            console.log(`File processed successfully: ${file.name}`);
+            toast.success(`${file.name} uploaded successfully`);
           }
-        }
-      } catch (error) {
-        if (error instanceof Error) {
-          toast.error(error.message);
-        } else {
-          console.error("Error uploading files!", error);
-          toast.error("Failed to upload files!");
-        }
-      } finally {
-        setUploadQueue([]);
-        setIsProcessingFile(false);
-        
-        // Clear the file input to allow re-uploading the same file
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
+        } catch (error) {
+          console.error(`Error processing file ${file.name}:`, error);
+          toast.error(`Failed to upload ${file.name}. ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+          // Remove from upload queue after processing (success or failure)
+          setUploadQueue(prev => prev.filter(name => name !== file.name));
         }
       }
-    },
-    [selectedChatModel, setAttachments, uploadFile, setIsProcessingFile],
-  );
+    } catch (error) {
+      console.error('Error processing files:', error);
+      toast.error(`Error processing files: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsProcessingFile(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [selectedChatModel, setAttachments, uploadFile, setIsProcessingFile]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">
