@@ -231,10 +231,17 @@ function PureMultimodalInput({
     formData.append("file", file);
     formData.append("chatId", chatId);
 
+    console.log(`Starting upload for file: ${file.name}, size: ${(file.size / (1024 * 1024)).toFixed(2)}MB, type: ${file.type}`);
+
     try {
       // Set a timeout for the fetch request
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      const timeoutId = setTimeout(() => {
+        console.error(`Upload timeout for ${file.name} after 60 seconds`);
+        controller.abort();
+      }, 60000); // 60 second timeout
+      
+      console.log(`Sending file to server: ${file.name}`);
       
       const response = await fetch("/api/files/upload", {
         method: "POST",
@@ -245,8 +252,11 @@ function PureMultimodalInput({
       // Clear the timeout
       clearTimeout(timeoutId);
 
+      console.log(`Server response for ${file.name}: ${response.status} ${response.statusText}`);
+
       if (response.ok) {
         const attachments = await response.json();
+        console.log(`Upload successful for ${file.name}, received ${attachments.length} attachments`);
         // Return all attachments from the server (both PDF and extracted text)
         return attachments;
       }
@@ -254,16 +264,30 @@ function PureMultimodalInput({
       // Handle error responses
       try {
         const errorData = await response.json();
+        console.error(`Upload error for ${file.name}:`, errorData);
         throw new Error(errorData.error || errorData.details || `Upload failed with status: ${response.status}`);
       } catch (jsonError) {
         // If we can't parse the error as JSON, use the status text
+        console.error(`Failed to parse error response for ${file.name}: ${response.statusText || response.status}`);
         throw new Error(`Upload failed: ${response.statusText || response.status}`);
       }
     } catch (error) {
       // Handle abort errors specifically
       if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new Error('Upload timed out. Please try again with a smaller file.');
+        console.error(`Upload timed out for ${file.name} after 60 seconds`);
+        toast.error(`Upload timed out for ${file.name}. Please try again with a smaller file or check your network connection.`);
+        throw new Error('Upload timed out. Please try again with a smaller file or check your network connection.');
       }
+      
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('network')) {
+        console.error(`Network error during upload of ${file.name}: ${error.message}`);
+        toast.error(`Network error during upload. Please check your internet connection and try again.`);
+        throw new Error('Network error during upload. Please check your internet connection and try again.');
+      }
+      
+      // Log all other errors
+      console.error(`Error uploading ${file.name}:`, error);
       
       // Re-throw other errors
       throw error;

@@ -60,12 +60,14 @@ export async function POST(request: Request) {
       return new Response('No chat ID provided', { status: 400 });
     }
 
-    // Log file details
+    // Enhanced logging for file details
     logger.upload.info('File upload request received', {
       filename: file.name,
       fileSize: file.size,
+      fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB',
       mimeType: file.type,
-      chatId
+      chatId,
+      environment: process.env.VERCEL_ENV || 'local'
     });
 
     // Validate file
@@ -92,7 +94,10 @@ export async function POST(request: Request) {
       if (file.type === 'application/pdf') {
         logger.document.info('Starting document processing', {
           mimeType: file.type,
-          filename: file.name
+          filename: file.name,
+          fileSize: file.size,
+          fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB',
+          environment: process.env.VERCEL_ENV || 'local'
         });
       }
 
@@ -125,17 +130,25 @@ export async function POST(request: Request) {
       // Make sure to mark upload complete even on error
       markFileUploadComplete(chatId);
       
+      // Enhanced error logging
       logger.upload.error('Error during file processing', {
         error: error instanceof Error ? error.message : 'Unknown error',
+        errorName: error instanceof Error ? error.name : 'Unknown',
+        errorStack: error instanceof Error ? error.stack : 'No stack trace',
         filename: file.name,
-        chatId
+        fileSize: file.size,
+        fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB',
+        chatId,
+        environment: process.env.VERCEL_ENV || 'local'
       });
       
       // For PDF files, if processing fails, return just the raw file as a fallback
       if (file.type === 'application/pdf') {
         try {
           logger.upload.info('Attempting fallback to raw PDF upload', {
-            filename: file.name
+            filename: file.name,
+            fileSize: file.size,
+            fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB'
           });
           
           const arrayBuf = await file.arrayBuffer();
@@ -144,6 +157,12 @@ export async function POST(request: Request) {
           // Upload the raw file
           const uniqueId = crypto.randomUUID();
           const uniqueFilename = `${uniqueId}-${file.name}`;
+          
+          logger.upload.debug('Uploading raw PDF to blob storage', {
+            uniqueFilename,
+            bufferSize: buf.length,
+            bufferSizeInMB: (buf.length / (1024 * 1024)).toFixed(2) + 'MB'
+          });
           
           const rawUploadData = await uploadBlob(uniqueFilename, buf, file.type);
           
@@ -155,7 +174,8 @@ export async function POST(request: Request) {
           }];
           
           logger.upload.info('Fallback to raw PDF successful', {
-            filename: file.name
+            filename: file.name,
+            url: rawUploadData.url
           });
           
           return new Response(JSON.stringify(fallbackAttachments), {
@@ -164,6 +184,8 @@ export async function POST(request: Request) {
         } catch (fallbackError) {
           logger.upload.error('Fallback upload also failed', {
             error: fallbackError instanceof Error ? fallbackError.message : 'Unknown error',
+            errorName: fallbackError instanceof Error ? fallbackError.name : 'Unknown',
+            errorStack: fallbackError instanceof Error ? fallbackError.stack : 'No stack trace',
             filename: file.name
           });
         }
@@ -174,13 +196,17 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Error uploading file:', error);
     logger.upload.error('File upload failed', {
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorName: error instanceof Error ? error.name : 'Unknown',
+      errorStack: error instanceof Error ? error.stack : 'No stack trace',
+      environment: process.env.VERCEL_ENV || 'local'
     });
     
     return new Response(
       JSON.stringify({ 
         error: 'Failed to upload file', 
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error',
+        code: error instanceof Error && 'code' in error ? (error as any).code : undefined
       }),
       {
         status: 500,
