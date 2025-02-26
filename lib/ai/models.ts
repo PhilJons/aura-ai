@@ -35,16 +35,25 @@ const createModel = (modelName: string) => {
 
   const baseConfig = {
     apiKey,
-    apiVersion: '2024-02-15-preview',
+    apiVersion: '2024-08-01-preview',
   };
 
   if (modelName === 'gpt-4o' || modelName === 'gpt-4o-mini') {
-    // For GPT-4o and GPT-4o mini, use Azure OpenAI endpoint
+    // Map internal model names to specific Azure deployments
+    // Both use the same API version (2024-08-01-preview) but different deployments:
+    // gpt-4o → gpt-4o-EU-30k deployment
+    // gpt-4o-mini → gpt-4o-mini deployment
+    const deploymentName = modelName === 'gpt-4o' ? 'gpt-4o-EU-30k' : 'gpt-4o-mini';
+    
+    // Log deployment information
+    console.log(`[Azure OpenAI] Using model: ${modelName} with deployment: ${deploymentName}`);
+    console.log(`[Azure OpenAI] Full endpoint: https://${process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME}.openai.azure.com/openai/deployments/${deploymentName}/chat/completions?api-version=${baseConfig.apiVersion}`);
+    
     const provider = createAzure({
       ...baseConfig,
       resourceName: process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME,
     });
-    return provider.chat(modelName === 'gpt-4o' ? 'gpt-4o' : 'gpt-4o-mini');
+    return provider.chat(deploymentName);
   } else {
     // For DeepSeek and Llama, use Azure AI endpoint
     const deploymentMap: { [key: string]: string } = {
@@ -57,6 +66,9 @@ const createModel = (modelName: string) => {
       throw new Error(`Unknown model: ${modelName}`);
     }
 
+    // Log deployment information
+    console.log(`[Azure AI] Using model: ${modelName} with deployment: ${deploymentName}`);
+    
     // Use Azure OpenAI SDK with the AI services endpoint
     const provider = createAzure({
       ...baseConfig,
@@ -70,10 +82,12 @@ const createModel = (modelName: string) => {
 // Create model instances with enhanced error handling
 const createModelWithLogging = (displayName: string, modelName: string) => {
   try {
-    debugLog(`Creating ${displayName} model`);
-    return createModel(modelName);
+    console.log(`[Model Initialization] Creating ${displayName} model (${modelName})`);
+    const model = createModel(modelName);
+    console.log(`[Model Initialization] Successfully created ${displayName} model`);
+    return model;
   } catch (error) {
-    console.error(`Error creating ${displayName} model:`, error);
+    console.error(`[Model Initialization] Error creating ${displayName} model:`, error);
     throw error;
   }
 };
