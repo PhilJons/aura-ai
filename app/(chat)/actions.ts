@@ -2,6 +2,7 @@
 
 import { generateText, type Message } from 'ai';
 import { cookies } from 'next/headers';
+import { auth } from '@/app/auth';
 
 import {
   deleteMessagesByChatIdAfterTimestamp,
@@ -21,10 +22,14 @@ export async function saveChatModelAsCookie(model: string) {
   const cookieStore = await cookies();
   const previousModel = cookieStore.get('chat-model')?.value || DEFAULT_CHAT_MODEL;
   
+  // Get the user's email from the session
+  const session = await auth();
+  const userEmail = session?.user?.email;
+  
   // Only track if the model is actually changing
   if (previousModel !== modelToSave) {
     // We don't have a chatId here, so we'll use 'global' to indicate this is a global setting change
-    await trackModelChanged('global', previousModel, modelToSave);
+    await trackModelChanged('global', previousModel, modelToSave, userEmail || undefined);
   }
   
   cookieStore.set('chat-model', modelToSave);

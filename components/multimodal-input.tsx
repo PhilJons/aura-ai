@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { useLocalStorage, useWindowSize } from "usehooks-ts";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 
 import { sanitizeUIMessages } from "@/lib/utils";
 import equal from "fast-deep-equal";
@@ -174,6 +175,9 @@ function PureMultimodalInput({
     []
   );
 
+  const { data: session } = useSession();
+  const userEmail = session?.user?.email;
+
   useEffect(() => {
     if (textareaRef.current) {
       const domValue = textareaRef.current.value;
@@ -230,13 +234,14 @@ function PureMultimodalInput({
         const newAttachments = result.attachments || [];
         setAttachments((prev) => [...prev, ...newAttachments]);
         
-        // Track file uploads for each attachment
+        // Track file uploads for each attachment with user email
         for (const attachment of newAttachments) {
           if (attachment.contentType && attachment.size) {
             await trackFileUploaded(
               chatId,
               attachment.contentType,
-              attachment.size
+              attachment.size,
+              userEmail || undefined
             );
           }
         }

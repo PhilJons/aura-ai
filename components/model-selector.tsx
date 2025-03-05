@@ -1,6 +1,7 @@
 'use client';
 
 import { startTransition, useMemo, useOptimistic, useState } from 'react';
+import { useSession } from 'next-auth/react';
 
 import { saveChatModelAsCookie } from '@/app/(chat)/actions';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,8 @@ export function ModelSelector({
   const [open, setOpen] = useState(false);
   const [optimisticModelId, setOptimisticModelId] =
     useOptimistic(selectedModelId);
+  const { data: session } = useSession();
+  const userEmail = session?.user?.email;
 
   const selectedChatModel = useMemo(
     () => chatModels.find((chatModel) => chatModel.id === optimisticModelId),
@@ -58,7 +61,7 @@ export function ModelSelector({
                 startTransition(() => {
                   setOptimisticModelId(id);
                   saveChatModelAsCookie(id);
-                  trackModelSelection(id);
+                  trackModelSelection(id, userEmail || undefined);
                 });
               }}
               className="gap-4 group/item flex flex-row justify-between items-center"

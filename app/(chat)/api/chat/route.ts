@@ -98,6 +98,8 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return new Response('Unauthorized', { status: 401 });
   }
+  
+  const userEmail = session.user.email;
 
   try {
     const {
@@ -112,25 +114,26 @@ export async function POST(request: Request) {
     const isNewChat = !existingChat;
     
     if (isNewChat) {
-      // Track new chat creation
-      await trackChatCreated(id);
+      // Track new chat creation with user email
+      await trackChatCreated(id, userEmail || undefined);
     }
     
-    // Track which model is being used for this message
-    await trackModelUsed(id, selectedChatModel);
+    // Track which model is being used for this message with user email
+    await trackModelUsed(id, selectedChatModel, userEmail || undefined);
 
     const userMessage = getMostRecentUserMessage(initialMessages);
     if (!userMessage) {
       return new Response('No user message found', { status: 400 });
     }
 
-    // Track the user message being sent
+    // Track the user message being sent with user email
     await trackMessageSent(
       id, 
       'user', 
       typeof userMessage.content === 'string' 
         ? userMessage.content.length 
-        : JSON.stringify(userMessage.content).length
+        : JSON.stringify(userMessage.content).length,
+      userEmail || undefined
     );
 
     const attachments = userMessage.experimental_attachments;
@@ -433,7 +436,8 @@ export async function POST(request: Request) {
                       await trackMessageSent(
                         id,
                         'assistant',
-                        assistantMessage.content.length
+                        assistantMessage.content.length,
+                        userEmail || undefined
                       );
                     }
                   }
@@ -569,7 +573,8 @@ export async function POST(request: Request) {
                     await trackMessageSent(
                       id,
                       'assistant',
-                      assistantMessage.content.length
+                      assistantMessage.content.length,
+                      userEmail || undefined
                     );
                   }
                 }

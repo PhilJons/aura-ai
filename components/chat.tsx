@@ -37,14 +37,15 @@ export function Chat({
   const [isExistingChat, setIsExistingChat] = useState(false);
   const router = useRouter();
   const { data: session } = useSession();
+  const userEmail = session?.user?.email;
 
   // Track new chat started
   useEffect(() => {
     // Only track if this is a new chat (no initial messages)
     if (initialMessages.length === 0) {
-      trackNewChatStarted();
+      trackNewChatStarted(userEmail || undefined);
     }
-  }, [initialMessages.length]);
+  }, [initialMessages.length, userEmail]);
 
   // Fetch chat data
   const { data: chat, error: chatError } = useSWR(
