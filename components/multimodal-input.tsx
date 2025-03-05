@@ -33,6 +33,7 @@ import { useDirectFileUpload } from "@/components/ui/direct-file-upload";
 import { cn } from "@/lib/utils";
 import { UploadProgress } from "@/components/upload-progress";
 import { trackFileUploaded } from '@/lib/analytics';
+import { trackClientMessageSent, trackClientFileUploaded } from '@/lib/client-analytics';
 
 // Icons
 function ArrowUpIcon({ size = 16 }: { size?: number }) {
@@ -176,7 +177,7 @@ function PureMultimodalInput({
   );
 
   const { data: session } = useSession();
-  const userEmail = session?.user?.email;
+  const userEmail = session?.user?.email || undefined;
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -237,11 +238,20 @@ function PureMultimodalInput({
         // Track file uploads for each attachment with user email
         for (const attachment of newAttachments) {
           if (attachment.contentType && attachment.size) {
+            // Server-side tracking
             await trackFileUploaded(
               chatId,
               attachment.contentType,
               attachment.size,
-              userEmail || undefined
+              userEmail
+            );
+            
+            // Client-side tracking
+            trackClientFileUploaded(
+              chatId,
+              attachment.contentType,
+              attachment.size,
+              userEmail
             );
           }
         }
@@ -309,6 +319,11 @@ function PureMultimodalInput({
   const submitForm = useCallback(() => {
     window.history.replaceState({}, "", `/chat/${chatId}`);
 
+    // Track the message being sent from the client side
+    if (input.trim()) {
+      trackClientMessageSent(chatId, input.trim().length, userEmail);
+    }
+
     // Only process attachments that are currently in the state
     // This ensures removed attachments don't get included
     const currentAttachments = [...attachments];
@@ -344,7 +359,7 @@ function PureMultimodalInput({
     if (width && width > 768) {
       textareaRef.current?.focus();
     }
-  }, [attachments, handleSubmit, setAttachments, setLocalStorageAttachments, setLocalStorageInput, width, chatId]);
+  }, [attachments, handleSubmit, setAttachments, setLocalStorageAttachments, setLocalStorageInput, width, chatId, input, userEmail]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -755,25 +770,17 @@ function PureSendButton({
   uploadQueue: Array<string>;
 }) {
   return (
-    <Button
-      size="icon"
+    <button
+      onClick={submitForm}
+      disabled={!input.trim() && uploadQueue.length === 0}
       className={cx(
-        "rounded-full w-8 h-8 p-0 flex items-center justify-center",
-        "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
-        "text-zinc-600 dark:text-zinc-400",
-        "border border-zinc-200 dark:border-zinc-800",
-        "transition-colors duration-200",
-        "disabled:opacity-40 disabled:hover:bg-background dark:disabled:hover:bg-zinc-900",
-        "[&_svg]:size-4 [&_svg]:shrink-0"
+        "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md border bg-background text-foreground transition-colors hover:bg-accent",
+        (!input.trim() && uploadQueue.length === 0) && "opacity-40"
       )}
-      onClick={(event) => {
-        event.preventDefault();
-        submitForm();
-      }}
-      disabled={input.length === 0 || uploadQueue.length > 0}
+      aria-label="Send message"
     >
-      <ArrowUpIcon size={16} />
-    </Button>
+      <ArrowUpIcon />
+    </button>
   );
 }
 
