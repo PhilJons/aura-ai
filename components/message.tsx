@@ -19,6 +19,7 @@ import { DocumentPreview } from "./document-preview";
 import { MessageReasoning } from "./message-reasoning";
 import { debug } from "@/lib/utils/debug";
 import { PreviewAttachment } from './preview-attachment';
+import { usePersistentAttachments } from '@/lib/hooks/use-persistent-attachments';
 
 interface DocumentToolInvocation {
   toolName: string;
@@ -106,6 +107,9 @@ const PurePreviewMessage = ({
   isReadonly: boolean;
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const [editedContent, setEditedContent] = useState<string>('');
+  const contentDivRef = useRef<HTMLDivElement>(null);
+  const { removePersistentAttachment } = usePersistentAttachments(chatId);
   const originalMessageId = useRef(message.id);
 
   // Use the original message ID for tool invocations to maintain stability
@@ -189,6 +193,20 @@ const PurePreviewMessage = ({
                   <PreviewAttachment
                     key={attachment.url}
                     attachment={attachment}
+                    onRemove={
+                      // Only allow removing attachments from non-readonly messages
+                      // and only for images in user messages
+                      !isReadonly && 
+                      messageWithStableId.role === 'user' && 
+                      attachment.contentType?.startsWith('image/') ?
+                      () => {
+                        console.log("Removing attachment from message:", attachment.url);
+                        if (attachment.url) {
+                          removePersistentAttachment(attachment.url);
+                        }
+                      } : 
+                      undefined
+                    }
                   />
                 ))}
               </div>

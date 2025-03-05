@@ -10,6 +10,12 @@ interface ImageOverlayProps {
 }
 
 export function ImageOverlay({ imageUrl, altText, isOpen, onClose }: ImageOverlayProps) {
+  console.log("ImageOverlay - Rendering:", {
+    imageUrl: imageUrl?.substring(0, 30) + '...',
+    altText,
+    isOpen
+  });
+  
   if (!isOpen) return null
 
   return (

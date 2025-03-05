@@ -17,6 +17,10 @@ import * as Collapsible from '@radix-ui/react-collapsible';
 import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
 import { cn } from '@/lib/utils';
 import { logger } from "@/lib/utils/logger";
+import { usePersistentAttachments } from '@/lib/hooks/use-persistent-attachments';
+import { Attachment } from 'ai';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PreviewAttachment } from './preview-attachment';
 
 interface DocumentFile {
   id?: string; // Message ID for the system message
@@ -218,6 +222,38 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
   const [isInitialPolling, setIsInitialPolling] = useState(false);
   const [hasStartedPolling, setHasStartedPolling] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState("documents");
+  
+  // Get persistent attachments
+  const { 
+    persistentAttachments, 
+    removePersistentAttachment, 
+    clearPersistentAttachments 
+  } = usePersistentAttachments(chatId);
+
+  // Add debugging logs
+  useEffect(() => {
+    if (isOpen) {
+      console.log("SystemPromptDialog - persistentAttachments:", {
+        count: persistentAttachments.length,
+        attachments: persistentAttachments.map(a => ({
+          url: a.url?.substring(0, 30) + '...',
+          name: a.name,
+          contentType: a.contentType
+        }))
+      });
+      console.log("SystemPromptDialog - chatId:", chatId);
+      
+      // Check if the DOM elements for persistent attachments are being rendered
+      setTimeout(() => {
+        const attachmentElements = document.querySelectorAll('[data-persistent-attachment]');
+        console.log("SystemPromptDialog - DOM elements for persistent attachments:", {
+          count: attachmentElements.length,
+          elements: Array.from(attachmentElements).map(el => el.getAttribute('data-name'))
+        });
+      }, 500); // Give time for the DOM to update
+    }
+  }, [persistentAttachments, chatId, isOpen]);
 
   const parseSystemMessage = (message: { id: string; content: string; role: string }): DocumentFile | null => {
     if (!message?.content || typeof message.content !== 'string' || 
@@ -315,6 +351,156 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
     }
   }, [chatId]);
 
+  // Polling effect for document processing
+  useEffect(() => {
+    console.log('Polling effect triggered:', { isProcessingFile, hasStartedPolling, chatId });
+    
+    // Only start polling when a file is being processed and we haven't started polling yet
+    if (!isProcessingFile || hasStartedPolling) {
+      console.log('Skipping polling:', { isProcessingFile, hasStartedPolling });
+      return;
+    }
+
+    // Get the most recently added attachment - this is likely the one being processed
+    const mostRecentAttachment = persistentAttachments.length > 0 
+      ? persistentAttachments[persistentAttachments.length - 1] 
+      : null;
+    
+    // STRICT MIME type check - only proceed with SSE for PDF and text files
+    // Using exact MIME types without includes() for stricter matching
+    const contentType = mostRecentAttachment?.contentType?.toLowerCase() || '';
+    const allowedDocumentTypes = [
+      'application/pdf',
+      'text/plain',
+      'text/markdown',
+      'text/html',
+      'text/csv'
+    ];
+    
+    // Strict check - must match an allowed type exactly
+    const isDocumentFile = allowedDocumentTypes.some(type => contentType === type);
+    
+    // Fallback check - if contentType contains pdf or text but isn't an exact match
+    const isLikelyDocumentFile = !isDocumentFile && 
+      (contentType.includes('/pdf') || contentType.includes('text/'));
+    
+    // Combined check - either exact match or likely document
+    const shouldProcessAsDocument = isDocumentFile || isLikelyDocumentFile;
+    
+    console.log('File type check:', {
+      contentType,
+      isDocumentFile,
+      isLikelyDocumentFile,
+      shouldProcessAsDocument,
+      fileName: mostRecentAttachment?.name
+    });
+
+    // More explicit check for image files
+    const isImageFile = contentType.startsWith('image/');
+    
+    console.log('Image check:', {
+      isImageFile,
+      contentType
+    });
+    
+    // If it's an image file or not a document file, skip SSE completely
+    if (isImageFile || !shouldProcessAsDocument) {
+      console.log('Not a document file or is an image, skipping SSE');
+      setHasStartedPolling(true); // Mark as processed
+      setIsInitialPolling(false);
+      return;
+    }
+    
+    console.log('Document file confirmed, starting SSE');
+    setIsInitialPolling(true);
+    setHasStartedPolling(true);
+    
+    // Set up SSE connection for real-time updates
+    const eventSource = new EventSource(`/api/chat/stream?chatId=${chatId}`);
+    
+    let isComplete = false;
+    let pollCount = 0;
+    const maxPolls = 60;
+    const pollInterval = 1000;
+    let pollTimer: NodeJS.Timeout | null = null;
+    
+    // Set up polling function
+    async function pollForDocuments() {
+      console.log('Polling iteration:', { pollCount, maxPolls });
+      const hasDocuments = await fetchSystemContent();
+      
+      if (hasDocuments || pollCount >= maxPolls || isComplete) {
+        console.log('Polling complete:', { hasDocuments, pollCount, isComplete });
+        setIsInitialPolling(false);
+        if (pollTimer) clearTimeout(pollTimer);
+        if (!isComplete) {
+          eventSource.close();
+        }
+        return;
+      }
+      
+      pollCount++;
+      pollTimer = setTimeout(pollForDocuments, pollInterval);
+    }
+    
+    // Handle SSE messages
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('Received SSE message:', {
+          type: data.type,
+          timestamp: new Date().toISOString()
+        });
+        
+        if (data.type === 'document-context-update-complete') {
+          console.log('Document context update complete via SSE');
+          isComplete = true;
+          markFileUploadComplete(chatId);
+          eventSource.close();
+          fetchSystemContent().finally(() => {
+            setIsInitialPolling(false);
+            if (pollTimer) clearTimeout(pollTimer);
+          });
+        }
+      } catch (error) {
+        console.error('Error handling SSE message:', error);
+      }
+    };
+    
+    // Handle SSE errors
+    eventSource.onerror = (error) => {
+      console.error('SSE error:', error);
+      if (!isComplete) {
+        console.log('Closing SSE connection due to error');
+        eventSource.close();
+      }
+    };
+    
+    // Start polling
+    pollForDocuments();
+    
+    // Fallback timeout
+    const fallbackTimeout = setTimeout(() => {
+      if (!isComplete) {
+        console.log('Fallback timeout reached');
+        markFileUploadComplete(chatId);
+        eventSource.close();
+        setIsInitialPolling(false);
+        if (pollTimer) clearTimeout(pollTimer);
+      }
+    }, 120000);
+    
+    // Return cleanup function
+    return () => {
+      if (pollTimer) clearTimeout(pollTimer);
+      if (fallbackTimeout) clearTimeout(fallbackTimeout);
+      console.log('Closing SSE connection');
+      eventSource.close();
+      setIsInitialPolling(false);
+    };
+  }, [fetchSystemContent, isProcessingFile, hasStartedPolling, chatId, persistentAttachments]);
+
+  // Similarly update the handleRefresh function with stricter MIME type checks
   const handleRefresh = useCallback(async () => {
     if (!chatId || isRefreshing) return;
 
@@ -322,6 +508,35 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
       chatId,
       timestamp: new Date().toISOString()
     });
+
+    // Check if we have any document files with strict MIME type checking
+    const hasDocumentFiles = files.some(file => {
+      const fileType = file.metadata?.fileType?.toLowerCase() || '';
+      const allowedTypes = [
+        'application/pdf',
+        'text/plain',
+        'text/markdown',
+        'text/html',
+        'text/csv'
+      ];
+      
+      // Strict check first
+      const isExactMatch = allowedTypes.some(type => fileType === type);
+      
+      // Fallback check for partial matches
+      const isLikelyDocument = !isExactMatch && 
+        (fileType.includes('/pdf') || fileType.includes('text/'));
+        
+      return isExactMatch || isLikelyDocument;
+    });
+
+    // If no document files, skip SSE
+    if (!hasDocumentFiles) {
+      console.log('[SystemPromptDialog] No document files, skipping SSE');
+      await fetchSystemContent();
+      setIsRefreshing(false);
+      return;
+    }
 
     setIsRefreshing(true);
     setError(null);
@@ -375,65 +590,20 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
           eventSource.close();
           fetchSystemContent().finally(() => setIsRefreshing(false));
         }
-      }, 10000);
+      }, 120000);
 
     } catch (error) {
       console.error('[SystemPromptDialog] Error during refresh:', error);
       setError('Failed to refresh documents');
       setIsRefreshing(false);
     }
-  }, [chatId, isRefreshing, fetchSystemContent]);
+  }, [chatId, isRefreshing, fetchSystemContent, files]);
 
   // Initial fetch without polling
   useEffect(() => {
     console.log('Initial fetch for chat:', chatId);
     fetchSystemContent();
   }, [fetchSystemContent, chatId]);
-
-  // Polling effect for document processing
-  useEffect(() => {
-    console.log('Polling effect triggered:', { isProcessingFile, hasStartedPolling, chatId });
-    
-    // Only start polling when a file is being processed and we haven't started polling yet
-    if (!isProcessingFile || hasStartedPolling) {
-      console.log('Skipping polling:', { isProcessingFile, hasStartedPolling });
-      return;
-    }
-
-    let pollCount = 0;
-    const maxPolls = 20;
-    const pollInterval = 500;
-    let pollTimer: NodeJS.Timeout | null = null;
-
-    async function pollForDocuments() {
-      console.log('Polling iteration:', { pollCount, maxPolls });
-      setIsInitialPolling(true);
-      setHasStartedPolling(true);
-      const hasDocuments = await fetchSystemContent();
-      
-      if (hasDocuments || pollCount >= maxPolls) {
-        console.log('Polling complete:', { hasDocuments, pollCount });
-        setIsInitialPolling(false);
-        if (pollTimer) clearTimeout(pollTimer);
-        return;
-      }
-
-      pollCount++;
-      pollTimer = setTimeout(pollForDocuments, pollInterval);
-    }
-
-    // Start polling
-    console.log('Starting polling for documents...');
-    pollForDocuments();
-
-    return () => {
-      if (pollTimer) {
-        console.log('Cleaning up polling timer');
-        clearTimeout(pollTimer);
-      }
-      setIsInitialPolling(false);
-    };
-  }, [fetchSystemContent, isProcessingFile, hasStartedPolling, chatId]);
 
   // Reset polling state when chat ID changes or processing stops
   useEffect(() => {
@@ -469,20 +639,37 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
     }
   };
 
+  // Set the active tab based on content
+  useEffect(() => {
+    if (isOpen) {
+      if (files.length > 0 && persistentAttachments.length === 0) {
+        setActiveTab("documents");
+      } else if (files.length === 0 && persistentAttachments.length > 0) {
+        setActiveTab("images");
+      }
+      // If both have content, keep the current tab
+    }
+  }, [isOpen, files.length, persistentAttachments.length]);
+
+  // Determine if we should show the dialog trigger
+  const hasContent = files.length > 0 || persistentAttachments.length > 0 || isInitialPolling;
+  const hasDocuments = files.length > 0;
+  const hasImages = persistentAttachments.length > 0;
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      {(files.length > 0 || isInitialPolling) && (
+      {hasContent && (
         <DialogTrigger asChild>
           <Button 
             variant="ghost" 
             size="icon" 
             className="size-9 relative" 
-            aria-label="View Document Context"
+            aria-label="View Context"
           >
             <Info className="size-4" />
-            {files.length > 0 && (
+            {(files.length > 0 || persistentAttachments.length > 0) && (
               <div className="absolute -top-1 -right-1 size-4 rounded-full bg-primary text-[10px] font-medium flex items-center justify-center text-primary-foreground">
-                {files.length}
+                {files.length + persistentAttachments.length}
               </div>
             )}
             {isInitialPolling && (
@@ -490,7 +677,7 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
                 <div className="size-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             )}
-            <span className="sr-only">View Document Context</span>
+            <span className="sr-only">View Context</span>
           </Button>
         </DialogTrigger>
       )}
@@ -518,45 +705,104 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
         </div>
         <DialogHeader>
           <div>
-            <DialogTitle>Document Context</DialogTitle>
+            <DialogTitle>Context</DialogTitle>
             <DialogDescription>
               {isInitialPolling 
                 ? "Processing documents..."
-                : files.length > 0 
-                  ? `${files.length} document${files.length === 1 ? '' : 's'} in the current context`
-                  : "No documents have been added to the context yet. Upload files to add them to the conversation."}
+                : (hasDocuments || hasImages)
+                  ? `${files.length} document${files.length === 1 ? '' : 's'} and ${persistentAttachments.length} image${persistentAttachments.length === 1 ? '' : 's'} in the current context`
+                  : "No documents or images have been added to the context yet."}
             </DialogDescription>
           </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[400px] rounded-md border">
-          {error ? (
-            <div className="flex items-center justify-center h-full text-destructive">
-              <p>{error}</p>
+        <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid grid-cols-2 mb-2">
+            <TabsTrigger value="documents" disabled={!hasDocuments && !isInitialPolling}>
+              Documents {hasDocuments && `(${files.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="images" disabled={!hasImages}>
+              Images {hasImages && `(${persistentAttachments.length})`}
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="documents" className="mt-0">
+            <ScrollArea className="h-[400px] rounded-md border">
+              {error ? (
+                <div className="flex items-center justify-center h-full text-destructive">
+                  <p>{error}</p>
+                </div>
+              ) : isLoading || isInitialPolling || isRefreshing ? (
+                <div className="flex items-center justify-center h-full">
+                  <span className="text-muted-foreground">
+                    {isInitialPolling ? "Processing documents..." : isRefreshing ? "Refreshing documents..." : "Updating documents..."}
+                  </span>
+                </div>
+              ) : files.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <p>No documents in context</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 p-2">
+                  {files.map((file: DocumentFile) => (
+                    <CollapsibleFileContent
+                      key={file.id || file.name}
+                      file={file}
+                      isLoading={isLoading}
+                      onRemove={removeFile}
+                    />
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+          
+          <TabsContent value="images" className="mt-0">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Persistent Images</h3>
+              {persistentAttachments.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={clearPersistentAttachments}
+                >
+                  Clear All
+                </Button>
+              )}
             </div>
-          ) : isLoading || isInitialPolling || isRefreshing ? (
-            <div className="flex items-center justify-center h-full">
-              <span className="text-muted-foreground">
-                {isInitialPolling ? "Processing documents..." : isRefreshing ? "Refreshing documents..." : "Updating documents..."}
-              </span>
-            </div>
-          ) : files.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <p>No documents in context</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2 p-2">
-              {files.map((file: DocumentFile) => (
-                <CollapsibleFileContent
-                  key={file.id || file.name}
-                  file={file}
-                  isLoading={isLoading}
-                  onRemove={removeFile}
-                />
-              ))}
-            </div>
-          )}
-        </ScrollArea>
+            <ScrollArea className="h-[400px] rounded-md border">
+              {persistentAttachments.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <p>No persistent images</p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3 p-4">
+                  {persistentAttachments.map((attachment: Attachment) => (
+                    <div 
+                      key={attachment.url} 
+                      className="relative group"
+                      data-persistent-attachment
+                      data-name={attachment.name}
+                    >
+                      <PreviewAttachment
+                        attachment={{
+                          url: attachment.url,
+                          name: attachment.name,
+                          contentType: attachment.contentType
+                        }}
+                        onRemove={() => {
+                          console.log("Removing attachment:", attachment.url);
+                          removePersistentAttachment(attachment.url || "");
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

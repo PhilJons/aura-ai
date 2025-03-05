@@ -18,7 +18,10 @@ export async function saveChatModelAsCookie(model: string) {
   const modelToSave = isValidModel ? model : DEFAULT_CHAT_MODEL;
   
   const cookieStore = await cookies();
-  cookieStore.set('chat-model', modelToSave);
+  cookieStore.set('chat-model', modelToSave, {
+    path: '/',
+    sameSite: 'lax',
+  });
 }
 
 export async function generateTitleFromUserMessage({

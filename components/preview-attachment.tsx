@@ -126,6 +126,13 @@ export const PreviewAttachment = ({
   isUploading?: boolean;
   onRemove?: () => void;
 }) => {
+  console.log("PreviewAttachment - Rendering attachment:", {
+    name: attachment.name,
+    url: attachment.url?.substring(0, 30) + '...',
+    contentType: attachment.contentType,
+    isUploading
+  });
+  
   const { 
     name = "", 
     url = "", 
@@ -152,6 +159,8 @@ export const PreviewAttachment = ({
     e.nativeEvent.stopImmediatePropagation();
     
     // Call the onRemove callback
+    // Note: For image attachments, the parent component is responsible for removing
+    // the attachment from persistent storage when this callback is invoked
     onRemove?.();
   };
 

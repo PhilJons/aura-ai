@@ -10,7 +10,7 @@ export type UploadResult = {
   error?: string
 }
 
-export type DirectFileUploadProps = {
+export interface DirectFileUploadProps {
   onUploadStart?: () => void
   onUploadComplete?: (result: UploadResult) => void
   onUploadError?: (error: string) => void
@@ -18,6 +18,7 @@ export type DirectFileUploadProps = {
   maxSizeMB?: number
   allowedTypes?: string[]
   debug?: boolean // Enable additional debug toasts
+  selectedChatModel: string
 }
 
 export function useDirectFileUpload({
@@ -27,7 +28,8 @@ export function useDirectFileUpload({
   chatId,
   maxSizeMB = 50, // Default to 50MB max size
   allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"],
-  debug = false
+  debug = false,
+  selectedChatModel,
 }: DirectFileUploadProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({})
@@ -48,8 +50,36 @@ export function useDirectFileUpload({
         fileSize: file.size,
         fileType: file.type,
         maxSizeMB,
-        allowedTypes
+        allowedTypes,
+        selectedChatModel
       })
+
+      // Check if the file is an image and enforce GPT-4o model
+      const isImage = file.type.startsWith('image/');
+      if (isImage) {
+        debugLog('Image file detected', {
+          filename: file.name,
+          fileType: file.type,
+          selectedChatModel
+        });
+        
+        if (selectedChatModel !== "chat-model-large") {
+          const errorMsg = "Images can only be analyzed with GPT-4o. Please select GPT-4o model or upload a different file type.";
+          logger.upload.info('File validation failed: image requires GPT-4o model', {
+            filename: file.name,
+            fileType: file.type,
+            selectedChatModel
+          });
+          toast.error(errorMsg);
+          onUploadError?.(errorMsg);
+          return false;
+        }
+        
+        debugLog('Image file validation passed', {
+          filename: file.name,
+          selectedChatModel
+        });
+      }
 
       // Check file size
       const maxSizeBytes = maxSizeMB * 1024 * 1024
@@ -84,12 +114,25 @@ export function useDirectFileUpload({
       })
       return true
     },
-    [maxSizeMB, allowedTypes, onUploadError, debugLog]
+    [maxSizeMB, allowedTypes, onUploadError, debugLog, selectedChatModel]
   )
 
   const uploadFile = useCallback(
     async (file: File): Promise<UploadResult> => {
+      debugLog('Starting file upload process', {
+        filename: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        selectedChatModel
+      });
+      
+      // Validate file before proceeding
       if (!validateFile(file)) {
+        debugLog('File validation failed, aborting upload', {
+          filename: file.name,
+          fileType: file.type
+        });
+        
         return {
           success: false,
           error: "File validation failed"
@@ -109,13 +152,15 @@ export function useDirectFileUpload({
         
         // Step 1: Get a SAS token for direct upload
         debugLog('Step 1: Requesting SAS token', {
-          filename: file.name
+          filename: file.name,
+          selectedChatModel
         })
         
         logger.upload.info('Requesting SAS token', {
           filename: file.name,
           contentType: file.type,
-          fileSize: file.size
+          fileSize: file.size,
+          selectedChatModel
         })
         
         const sasStartTime = Date.now()
@@ -127,6 +172,7 @@ export function useDirectFileUpload({
           body: JSON.stringify({
             filename: file.name,
             contentType: file.type,
+            selectedChatModel
           }),
         })
         const sasEndTime = Date.now()
@@ -275,6 +321,7 @@ export function useDirectFileUpload({
             contentType: file.type,
             originalFilename: file.name,
             chatId: chatId,
+            selectedChatModel: selectedChatModel,
           }),
         })
         const processEndTime = Date.now()
@@ -360,7 +407,7 @@ export function useDirectFileUpload({
         setUploadProgress(newProgress)
       }
     },
-    [chatId, onUploadComplete, onUploadError, onUploadStart, validateFile, uploadProgress, debugLog]
+    [chatId, onUploadComplete, onUploadError, onUploadStart, validateFile, uploadProgress, debugLog, selectedChatModel]
   )
 
   return {

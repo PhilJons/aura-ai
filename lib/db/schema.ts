@@ -16,6 +16,7 @@ export interface Chat {
   userId: string;
   visibility: 'public' | 'private';
   type: 'chat';
+  model?: string; // The model used for this chat
 }
 
 export type MessageRole = 'system' | 'user' | 'assistant' | 'data' | 'tool';
@@ -28,6 +29,7 @@ export interface Message {
   createdAt: string;
   type: 'message';
   attachments?: string; // JSON string of attachments
+  model?: string; // The model used to generate this message
 }
 
 export interface Vote {

@@ -42,18 +42,25 @@ export const maxDuration = 55;
 
 export async function POST(request: Request) {
   const session = await auth();
-
-  if (!session || !session.user) {
-    return new Response('Unauthorized', { status: 401 });
+  if (!session?.user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const chatId = formData.get('chatId') as string;
+    const file = formData.get("file") as File;
+    const chatId = formData.get("chatId") as string;
+    const selectedChatModel = formData.get("selectedChatModel") as string;
 
     if (!file) {
-      return new Response('No file provided', { status: 400 });
+      logger.upload.error('No file provided in upload request');
+      return new Response(JSON.stringify({ error: "No file provided" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     if (!chatId) {
@@ -67,18 +74,31 @@ export async function POST(request: Request) {
       fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB',
       mimeType: file.type,
       chatId,
-      environment: process.env.VERCEL_ENV || 'local'
+      selectedChatModel,
+      userId: session.user.id
     });
 
-    // Validate file
-    const validationResult = FileSchema.safeParse({ file });
-    if (!validationResult.success) {
+    // Validate the file
+    try {
+      FileSchema.parse({ file });
+      
+      // Check if the file is an image and enforce GPT-4o model
+      const isImage = file.type.startsWith('image/');
+      if (isImage && selectedChatModel !== "chat-model-large") {
+        return new Response(
+          JSON.stringify({
+            error: "Images can only be analyzed with GPT-4o. Please select GPT-4o model or upload a different file type."
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    } catch (error) {
       logger.upload.error('File validation failed', {
-        error: validationResult.error.errors[0].message,
+        error: error instanceof Error ? error.message : 'Unknown error',
         filename: file.name
       });
       return new Response(
-        JSON.stringify({ error: validationResult.error.errors[0].message }),
+        JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
         {
           status: 400,
           headers: { 'Content-Type': 'application/json' },

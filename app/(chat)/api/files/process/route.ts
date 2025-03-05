@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       userId: session.user.id
     });
     
-    const { blobName, contentType, originalFilename, chatId } = requestBody;
+    const { blobName, contentType, originalFilename, chatId, selectedChatModel } = requestBody;
 
     if (!blobName || !contentType || !originalFilename || !chatId) {
       const missingFields = [];
@@ -46,6 +46,23 @@ export async function POST(request: Request) {
       return new Response(JSON.stringify({ 
         error: 'Missing required fields', 
         details: `${missingFields.join(', ')} are required` 
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Check if the file is an image and enforce GPT-4o model
+    const isImage = contentType.startsWith('image/');
+    if (isImage && selectedChatModel !== "chat-model-large") {
+      logger.upload.info('Image file requires GPT-4o model', {
+        contentType,
+        selectedChatModel,
+        userId: session.user.id
+      });
+      
+      return new Response(JSON.stringify({ 
+        error: 'Images can only be analyzed with GPT-4o. Please select GPT-4o model or upload a different file type.' 
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },

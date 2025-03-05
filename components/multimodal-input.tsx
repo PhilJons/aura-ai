@@ -31,6 +31,7 @@ import { logger } from "@/lib/utils/logger";
 import { useDirectFileUpload } from "@/components/ui/direct-file-upload";
 import { cn } from "@/lib/utils";
 import { UploadProgress } from "@/components/upload-progress";
+import { usePersistentAttachments } from "@/lib/hooks/use-persistent-attachments";
 
 // Icons
 function ArrowUpIcon({ size = 16 }: { size?: number }) {
@@ -127,10 +128,31 @@ interface MultimodalInputProps {
 }
 
 function validateFileType(file: File, selectedChatModel: string) {
+  console.log("Validating file type:", { 
+    fileName: file.name, 
+    fileType: file.type, 
+    selectedChatModel 
+  });
+  
+  // Check if the file is an image
+  const isImage = file.type.startsWith('image/');
+  
+  // If it's an image, only allow it with GPT-4o (chat-model-large)
+  if (isImage && selectedChatModel !== "chat-model-large") {
+    console.error("Image validation failed: wrong model selected", {
+      fileType: file.type,
+      selectedModel: selectedChatModel
+    });
+    throw new Error("Images can only be analyzed with GPT-4o. Please select GPT-4o model or upload a different file type.");
+  }
+  
   // For GPT-4o mini, only allow PDFs and text files
   if (selectedChatModel === "chat-model-small") {
     const allowedTypes = ["application/pdf", "text/plain"];
     if (!allowedTypes.includes(file.type)) {
+      console.error("File validation failed: unsupported type for GPT-4o mini", {
+        fileType: file.type
+      });
       throw new Error("Only PDF and text documents are supported with GPT-4o Mini");
     }
     return true;
@@ -139,8 +161,17 @@ function validateFileType(file: File, selectedChatModel: string) {
   // For other models, allow images as well
   const allowedTypes = ["application/pdf", "text/plain", "image/jpeg", "image/png", "image/webp"];
   if (!allowedTypes.includes(file.type)) {
+    console.error("File validation failed: unsupported type", {
+      fileType: file.type
+    });
     throw new Error("Unsupported file type. Please upload PDF, text, or image files.");
   }
+  
+  console.log("File validation passed", {
+    fileName: file.name,
+    fileType: file.type,
+    selectedChatModel
+  });
   return true;
 }
 
@@ -166,6 +197,9 @@ function PureMultimodalInput({
   const [textareaHeight, setTextareaHeight] = useState(40);
   const pathname = usePathname();
   const isRootPath = pathname === '/';
+  
+  // Access the persistent attachments hook
+  const { addPersistentAttachment, removePersistentAttachment } = usePersistentAttachments(chatId);
 
   const [localStorageInput, setLocalStorageInput] = useLocalStorage("input", "");
   const [localStorageAttachments, setLocalStorageAttachments] = useLocalStorage<Array<CustomAttachment>>(
@@ -227,6 +261,14 @@ function PureMultimodalInput({
       console.log("Upload complete", result);
       if (result.success && result.attachments) {
         const newAttachments = result.attachments || [];
+        
+        // Add image attachments to persistent storage
+        newAttachments.forEach(attachment => {
+          if (attachment.contentType?.startsWith('image/')) {
+            addPersistentAttachment(attachment);
+          }
+        });
+        
         setAttachments((prev) => [...prev, ...newAttachments]);
       }
       setIsProcessingFile(false);
@@ -237,25 +279,52 @@ function PureMultimodalInput({
       setIsProcessingFile(false);
       setUploadQueue((prev) => prev.slice(1));
     },
-    debug: false // Disable debug toasts
+    debug: false, // Disable debug toasts
+    selectedChatModel, // Pass the selectedChatModel
   });
 
   const handleAttachmentClick = useCallback(() => {
+    console.log("Attachment button clicked", { selectedChatModel });
+    
+    // Ensure a model is selected before allowing file uploads
+    if (!selectedChatModel) {
+      console.log("No chat model selected");
+      toast.error("Please select a chat model first");
+      return;
+    }
+    
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
-  }, []);
+  }, [selectedChatModel]);
 
   const handleFileInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
       
+      console.log("File input change detected", {
+        fileCount: files.length,
+        fileTypes: files.map(f => f.type),
+        selectedModel: selectedChatModel
+      });
+      
       // Process files sequentially to avoid overwhelming the server
       for (const file of files) {
         try {
+          // Validate file type based on selected model before uploading
+          // This is the critical client-side validation
+          console.log(`Validating file: ${file.name}`, {
+            fileType: file.type,
+            selectedModel: selectedChatModel
+          });
+          
+          validateFileType(file, selectedChatModel);
+          
+          // Only proceed with upload if validation passes
+          console.log(`Starting upload for: ${file.name}`);
           await uploadFile(file);
         } catch (error) {
-          console.error(`Error uploading file: ${file.name}`, error);
+          console.error(`Error handling file: ${file.name}`, error);
           toast.error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
@@ -263,7 +332,7 @@ function PureMultimodalInput({
       // Reset the input value so the same file can be uploaded again if needed
       e.target.value = '';
     }
-  }, [uploadFile]);
+  }, [uploadFile, selectedChatModel]);
 
   const handleFileDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -272,17 +341,34 @@ function PureMultimodalInput({
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files);
       
+      console.log("File drop detected", {
+        fileCount: files.length,
+        fileTypes: files.map(f => f.type),
+        selectedModel: selectedChatModel
+      });
+      
       // Process files sequentially to avoid overwhelming the server
       for (const file of files) {
         try {
+          // Validate file type based on selected model before uploading
+          // This is the critical client-side validation
+          console.log(`Validating dropped file: ${file.name}`, {
+            fileType: file.type,
+            selectedModel: selectedChatModel
+          });
+          
+          validateFileType(file, selectedChatModel);
+          
+          // Only proceed with upload if validation passes
+          console.log(`Starting upload for dropped file: ${file.name}`);
           await uploadFile(file);
         } catch (error) {
-          console.error(`Error uploading file: ${file.name}`, error);
+          console.error(`Error handling dropped file: ${file.name}`, error);
           toast.error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
     }
-  }, [uploadFile, setIsDragging]);
+  }, [uploadFile, setIsDragging, selectedChatModel]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -295,6 +381,35 @@ function PureMultimodalInput({
     // Only process attachments that are currently in the state
     // This ensures removed attachments don't get included
     const currentAttachments = [...attachments];
+    
+    console.log("Submit form called", {
+      attachmentCount: currentAttachments.length,
+      selectedModel: selectedChatModel
+    });
+    
+    // Check if there are any image attachments
+    const imageAttachments = currentAttachments.filter(
+      attachment => attachment.contentType?.startsWith('image/')
+    );
+    
+    const hasImageAttachments = imageAttachments.length > 0;
+    
+    console.log("Attachment check", {
+      totalAttachments: currentAttachments.length,
+      imageAttachments: imageAttachments.length,
+      hasImageAttachments,
+      selectedModel: selectedChatModel
+    });
+    
+    // If there are image attachments, ensure we're using GPT-4o
+    if (hasImageAttachments && selectedChatModel !== "chat-model-large") {
+      console.error("Cannot submit with image attachments using non-GPT-4o model", {
+        selectedModel: selectedChatModel,
+        imageAttachmentCount: imageAttachments.length
+      });
+      toast.error("Images can only be analyzed with GPT-4o. Please select GPT-4o model or remove the image attachments.");
+      return;
+    }
     
     // Filter attachments to only use the extracted text for PDFs and text files
     const processedAttachments = currentAttachments.filter(attachment => {
@@ -314,12 +429,17 @@ function PureMultimodalInput({
       }
       return attachment;
     });
+    
+    console.log("Submitting with processed attachments", {
+      processedAttachmentCount: processedAttachments.length
+    });
 
     handleSubmit(undefined, {
       experimental_attachments: processedAttachments,
     });
 
-    // Clear attachments from both state and localStorage
+    // Clear temporary attachments from both state and localStorage
+    // but keep persistent attachments
     setAttachments([]);
     setLocalStorageAttachments([]);
     setLocalStorageInput("");
@@ -327,15 +447,49 @@ function PureMultimodalInput({
     if (width && width > 768) {
       textareaRef.current?.focus();
     }
-  }, [attachments, handleSubmit, setAttachments, setLocalStorageAttachments, setLocalStorageInput, width, chatId]);
+  }, [attachments, handleSubmit, setAttachments, setLocalStorageAttachments, setLocalStorageInput, width, chatId, selectedChatModel]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    console.log("Drag enter detected", { 
+      selectedModel: selectedChatModel,
+      itemCount: e.dataTransfer.items.length
+    });
+    
     if (!selectedChatModel) {
+      console.log("No chat model selected");
       toast.error("Please select a chat model first");
       return;
     }
+    
+    // Check if the dragged files contain images
+    let hasImageFiles = false;
+    
+    if (e.dataTransfer.items.length > 0) {
+      console.log("Checking dragged items");
+      
+      for (let i = 0; i < e.dataTransfer.items.length; i++) {
+        const item = e.dataTransfer.items[i];
+        console.log(`Item ${i}:`, { kind: item.kind, type: item.type });
+        
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          hasImageFiles = true;
+          console.log("Image file detected in drag");
+          break;
+        }
+      }
+    }
+    
+    // If there are image files, ensure we're using GPT-4o
+    if (hasImageFiles && selectedChatModel !== "chat-model-large") {
+      console.log("Image files detected but wrong model selected", { selectedModel: selectedChatModel });
+      toast.error("Images can only be analyzed with GPT-4o. Please select GPT-4o model first.");
+      return;
+    }
+    
+    console.log("Drag validation passed, setting isDragging to true");
     setIsDragging(true);
   }, [selectedChatModel]);
 
@@ -386,8 +540,13 @@ function PureMultimodalInput({
       
       return true;
     });
+
+    // If this is an image attachment, also remove it from persistent storage
+    if (attachmentToRemove.contentType?.startsWith('image/') && attachmentToRemove.url) {
+      console.log("Removing image from persistent storage:", attachmentToRemove.url);
+      removePersistentAttachment(attachmentToRemove.url);
+    }
     
-    // Update both state and localStorage directly
     setAttachments(fullyUpdatedAttachments);
     setLocalStorageAttachments(fullyUpdatedAttachments);
     
@@ -424,7 +583,7 @@ function PureMultimodalInput({
     }
     
     console.log("Attachment removed:", attachmentToRemove.name || attachmentToRemove.url);
-  }, [attachments, setLocalStorageAttachments, chatId]);
+  }, [attachments, setLocalStorageAttachments, chatId, removePersistentAttachment]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">
@@ -488,7 +647,7 @@ function PureMultimodalInput({
         role="button"
         tabIndex={0}
         className={cx(
-          "flex items-end w-full px-4 py-2",
+          "flex flex-col w-full px-4 py-2",
           "bg-background dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800",
           "shadow-sm transition-all duration-300 ease-in-out",
           "rounded-[var(--radius-lg)]",
@@ -511,7 +670,7 @@ function PureMultimodalInput({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="absolute inset-0 m-[-2px] bg-gradient-to-br from-blue-100/90 to-blue-50/90 dark:from-blue-950/90 dark:to-blue-900/90 backdrop-blur-[2px] rounded-[var(--radius-lg)] border-2 border-dashed border-blue-400/50 dark:border-blue-400/30 z-50 flex items-center justify-center"
+              className="absolute inset-0 -m-[2px] bg-gradient-to-br from-blue-50/90 dark:from-blue-950/90 to-blue-100/90 dark:to-blue-900/90 backdrop-blur-[2px] rounded-[var(--radius-lg)] border-2 border-dashed border-blue-400/50 z-50 flex items-center justify-center"
             >
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -521,7 +680,7 @@ function PureMultimodalInput({
                 }}
                 transition={{ 
                   duration: 3,
-                  repeat: Number.POSITIVE_INFINITY,
+                  repeat: Infinity,
                   ease: "easeInOut",
                   times: [0, 0.5, 1]
                 }}
@@ -533,33 +692,31 @@ function PureMultimodalInput({
                   }}
                   transition={{
                     duration: 3,
-                    repeat: Number.POSITIVE_INFINITY,
+                    repeat: Infinity,
                     ease: "easeInOut",
                     times: [0, 0.5, 1]
                   }}
-                  className="size-8 flex items-center justify-center"
+                  className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 border-2 border-blue-200 dark:border-blue-800 flex items-center justify-center"
                 >
-                  <div className="size-6 text-blue-500 dark:text-blue-400">
-                    <svg 
-                      className="size-6"
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                    >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={2} 
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3 3m0 0l-3-3m3 3V8" 
-                      />
-                    </svg>
-                  </div>
+                  <svg 
+                    className="w-6 h-6 text-blue-500 dark:text-blue-400"
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3 3m0 0l-3-3m3 3V8"
+                    />
+                  </svg>
                 </motion.div>
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-lg font-medium text-blue-600 dark:text-blue-300">
+                  <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
                     Drop files to upload
                   </span>
-                  <span className="text-sm text-blue-500/80 dark:text-blue-300/80">
+                  <span className="text-sm text-blue-500/80 dark:text-blue-400/80">
                     Release to add your files
                   </span>
                 </div>
@@ -567,7 +724,7 @@ function PureMultimodalInput({
             </motion.div>
           )}
         </AnimatePresence>
-
+        
         <motion.div 
           className="flex w-full flex-col gap-2"
           animate={{
@@ -580,88 +737,63 @@ function PureMultimodalInput({
         >
           <Textarea
             ref={textareaRef}
-            placeholder="Send a message..."
+            tabIndex={0}
+            placeholder="Ask a question or upload a file..."
+            className={cx(
+              "min-h-[40px] max-h-[200px] py-2.5 px-0 resize-none",
+              "border-0 focus-visible:ring-0 focus-visible:ring-offset-0",
+              "placeholder:text-muted-foreground",
+              "bg-transparent",
+              "scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800 scrollbar-track-transparent",
+              "disabled:opacity-100",
+              "rounded-none"
+            )}
+            style={{
+              height: isDragging ? "120px" : `${textareaHeight}px`,
+              transition: "height 0.3s ease-in-out"
+            }}
             value={input}
+            disabled={isLoading}
             onChange={handleInput}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if (input.trim() || attachments.length > 0) {
-                  submitForm();
-                }
+                submitForm();
               }
             }}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
-              target.style.height = "auto";
-              const newHeight = Math.min(target.scrollHeight, 200);
+              target.style.height = "0";
+              const newHeight = Math.min(
+                Math.max(40, target.scrollHeight),
+                200
+              );
               target.style.height = `${newHeight}px`;
               setTextareaHeight(newHeight);
             }}
-            rows={1}
-            className="w-full min-h-[40px] max-h-[200px] resize-none border-none bg-transparent text-foreground placeholder:text-zinc-500 text-base pb-0 focus:ring-0 dark:focus:ring-0"
-            style={{ 
-              height: isDragging ? "120px" : "auto",
-              transition: "height 0.3s ease-in-out"
-            }}
-            onDragEnter={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleDragEnter(e);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleDragLeave(e);
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleDrop(e);
-            }}
           />
 
-          <div className="flex w-full items-center justify-between">
-            <div className="flex items-center">
-              <AttachmentsButton
-                className={cn(
-                  "absolute bottom-1 left-1 z-10 sm:left-2"
-                )}
-                onClick={handleAttachmentClick}
-                disabled={isLoading}
-              >
-                <PlusIcon size={16} />
-              </AttachmentsButton>
-            </div>
+          <div className="flex items-center justify-between w-full pt-2">
+            <AttachmentsButton
+              onClick={handleAttachmentClick}
+              disabled={isLoading}
+            />
 
-            <div className="flex items-center">
-              {isLoading ? (
-                <StopButton stop={stop} setMessages={setMessages} />
-              ) : (
-                <SendButton
-                  input={input}
-                  submitForm={submitForm}
-                  uploadQueue={uploadQueue}
-                />
-              )}
-            </div>
+            {isLoading ? (
+              <StopButton stop={stop} setMessages={setMessages} />
+            ) : (
+              <SendButton
+                submitForm={submitForm}
+                input={input}
+                uploadQueue={uploadQueue}
+              />
+            )}
           </div>
         </motion.div>
       </div>
     </div>
   );
 }
-
-export const MultimodalInput = memo(PureMultimodalInput, (prevProps, nextProps) => {
-  if (prevProps.input !== nextProps.input) return false;
-  if (prevProps.isLoading !== nextProps.isLoading) return false;
-  if (!equal(prevProps.attachments, nextProps.attachments)) return false;
-  return true;
-});
 
 function PureAttachmentsButton({
   className,
@@ -675,15 +807,14 @@ function PureAttachmentsButton({
   children?: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      className={cn(
-        "flex h-8 w-8 items-center justify-center rounded-full p-0",
+    <Button
+      size="icon"
+      className={cx(
+        "rounded-full w-8 h-8 p-0 flex items-center justify-center",
         "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
         "text-zinc-600 dark:text-zinc-400",
         "border border-zinc-200 dark:border-zinc-800",
         "transition-colors duration-200",
-        "disabled:opacity-40 disabled:hover:bg-background dark:disabled:hover:bg-zinc-900",
         "[&_svg]:size-4 [&_svg]:shrink-0",
         className
       )}
@@ -691,7 +822,7 @@ function PureAttachmentsButton({
       disabled={disabled}
     >
       {children || <PlusIcon size={16} />}
-    </button>
+    </Button>
   );
 }
 
@@ -726,8 +857,6 @@ function PureStopButton({
   );
 }
 
-const StopButton = memo(PureStopButton);
-
 function PureSendButton({
   submitForm,
   input,
@@ -737,31 +866,31 @@ function PureSendButton({
   input: string;
   uploadQueue: Array<string>;
 }) {
+  const isDisabled = !input.trim() && uploadQueue.length === 0;
+
   return (
     <Button
       size="icon"
       className={cx(
         "rounded-full w-8 h-8 p-0 flex items-center justify-center",
-        "bg-background hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800",
-        "text-zinc-600 dark:text-zinc-400",
-        "border border-zinc-200 dark:border-zinc-800",
+        "bg-primary hover:bg-primary/90",
+        "text-primary-foreground",
         "transition-colors duration-200",
-        "disabled:opacity-40 disabled:hover:bg-background dark:disabled:hover:bg-zinc-900",
-        "[&_svg]:size-4 [&_svg]:shrink-0"
+        "[&_svg]:size-4 [&_svg]:shrink-0",
+        isDisabled && "opacity-50 cursor-not-allowed"
       )}
       onClick={(event) => {
         event.preventDefault();
         submitForm();
       }}
-      disabled={input.length === 0 || uploadQueue.length > 0}
+      disabled={isDisabled}
     >
       <ArrowUpIcon size={16} />
     </Button>
   );
 }
 
-const SendButton = memo(PureSendButton, (prevProps, nextProps) => {
-  if (prevProps.uploadQueue.length !== nextProps.uploadQueue.length) return false;
-  if (prevProps.input !== nextProps.input) return false;
-  return true;
-});
+const StopButton = memo(PureStopButton);
+const SendButton = memo(PureSendButton);
+
+export const MultimodalInput = memo(PureMultimodalInput);

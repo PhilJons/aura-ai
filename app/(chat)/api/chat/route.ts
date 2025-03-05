@@ -26,6 +26,7 @@ import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { getEncoding } from 'js-tiktoken';
 import { processDocument, } from '@/lib/azure/document';
+import { containers } from '@/lib/db/cosmos';
 
 // Maximum tokens we want to allow for the context (8k for GPT-4)
 const MAX_CONTEXT_TOKENS = 8000;
@@ -94,39 +95,118 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const session = await auth();
 
-  if (!session?.user?.id) {
+  if (!session?.user) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
-    const {
-      id,
-      messages: initialMessages,
+    // Parse request body once and store it
+    const requestBody = await request.json();
+    const { 
+      id = generateUUID(), 
+      messages = [], 
+      selectedChatModel: bodyModel,
+      modelParam,
+      persistentAttachments = [] 
+    } = requestBody;
+    
+    // Get model from URL parameter
+    const { searchParams } = new URL(request.url);
+    const urlModel = searchParams.get('model');
+    
+    // Map URL parameter to internal model ID
+    const modelMap: Record<string, string> = {
+      'gpt-4o': 'chat-model-large',
+      'gpt-4o-mini': 'chat-model-small'
+    };
+    
+    // Log incoming request details for debugging
+    console.log('[CHAT API] Request details:', {
+      urlModel,
+      bodyModel,
+      modelParam,
+      requestUrl: request.url
+    });
+    
+    // Get model from URL parameter, body, or default to small model
+    let selectedChatModel = 'chat-model-small';
+    
+    // URL parameter gets highest priority
+    if (urlModel && modelMap[urlModel]) {
+      selectedChatModel = modelMap[urlModel];
+      console.log(`[CHAT API] Using model from URL parameter: ${urlModel} -> ${selectedChatModel}`);
+    }
+    // Next check modelParam in the body
+    else if (modelParam && modelMap[modelParam]) {
+      selectedChatModel = modelMap[modelParam];
+      console.log(`[CHAT API] Using model from body modelParam: ${modelParam} -> ${selectedChatModel}`);
+    }
+    // Finally check selectedChatModel in body
+    else if (bodyModel) {
+      selectedChatModel = bodyModel;
+      console.log(`[CHAT API] Using model from body selectedChatModel: ${selectedChatModel}`);
+    }
+    
+    console.log('[CHAT API] Model selection:', {
+      urlModel,
+      bodyModel,
+      modelParam,
       selectedChatModel,
-    }: { id: string; messages: Array<AIMessage>; selectedChatModel: string } =
-      await request.json();
+      requestUrl: request.url
+    });
 
-    const userMessage = getMostRecentUserMessage(initialMessages);
+    // Store the selected model in the chat object if it doesn't exist yet
+    try {
+      const existingChat = await getChatById({ id });
+      if (existingChat) {
+        // Update the chat with the selected model
+        const updatedChat = {
+          ...existingChat,
+          model: selectedChatModel
+        };
+        await containers.chats.items.upsert(updatedChat);
+        console.log('[CHAT API] Updated chat with model:', selectedChatModel);
+      }
+    } catch (error) {
+      console.error('[CHAT API] Error updating chat model:', error);
+      // Continue processing even if this fails
+    }
+
+    const userMessage = getMostRecentUserMessage(messages);
     if (!userMessage) {
       return new Response('No user message found', { status: 400 });
     }
 
-    const attachments = userMessage.experimental_attachments;
-    let processedMessages = [...initialMessages];
+    // Combine current message attachments with persistent attachments
+    const currentAttachments = userMessage.experimental_attachments || [];
+    const allAttachments = [...currentAttachments];
+    
+    // Only add persistent attachments if they're not already in the current message
+    // This prevents duplicate processing of the same attachment
+    if (persistentAttachments.length > 0) {
+      const currentAttachmentUrls = new Set(currentAttachments.map((a: AIAttachment) => a.url));
+      const uniquePersistentAttachments = persistentAttachments.filter(
+        (a: AIAttachment) => a.url && !currentAttachmentUrls.has(a.url)
+      );
+      
+      allAttachments.push(...uniquePersistentAttachments);
+    }
+
+    let processedMessages = [...messages];
 
     // Get existing system messages from the conversation
-    const existingSystemMessages = initialMessages.filter(
-      msg => msg.role === 'system' && 
+    const existingSystemMessages = messages.filter(
+      (msg: AIMessage) => msg.role === 'system' && 
       typeof msg.content === 'string' && 
       msg.content.startsWith('Document Intelligence Analysis:')
     );
 
-    if (attachments?.length) {
+    if (allAttachments.length) {
       // Mark file upload started
       await emitDocumentContextUpdate(id);
 
       // Separate attachments by type
-      const imageAttachments = attachments.filter(a => a.contentType?.startsWith('image/'));
+      const imageAttachments = allAttachments.filter(a => a.contentType?.startsWith('image/'));
       
       // Define text-based file types
       const TEXT_BASED_TYPES = [
@@ -161,7 +241,7 @@ export async function POST(request: Request) {
         'text/xml'
       ];
 
-      const documentAttachments = attachments.filter((a) => {
+      const documentAttachments = allAttachments.filter((a) => {
         const customAttachment = a as CustomAttachment;
         return !!(customAttachment.contentType && (
           // Handle extracted JSON from PDFs
@@ -266,7 +346,7 @@ export async function POST(request: Request) {
 
       // Create system messages for each valid content
       const newSystemMessages: DBMessage[] = [];
-      let totalTokens = countTokens(existingSystemMessages.map(msg => msg.content).join('\n'));
+      let totalTokens = countTokens(existingSystemMessages.map((msg: AIMessage) => typeof msg.content === 'string' ? msg.content : '').join('\n'));
 
       for (const content of validContents) {
         const message = createSystemMessage(content, id);
@@ -290,7 +370,8 @@ export async function POST(request: Request) {
         content: userMessage.content,
         createdAt: new Date().toISOString(),
         type: 'message',
-        attachments: JSON.stringify(userMessageWithImages.experimental_attachments || [])
+        attachments: JSON.stringify(userMessageWithImages.experimental_attachments || []),
+        model: selectedChatModel
       };
 
       // Save messages to the database
@@ -307,17 +388,17 @@ export async function POST(request: Request) {
 
       // Combine existing system messages with new ones and prepare for OpenAI
       processedMessages = [
-        ...existingSystemMessages.map(msg => ({
+        ...existingSystemMessages.map((msg: AIMessage) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
         })),
-        ...newSystemMessages.map(msg => ({
+        ...newSystemMessages.map((msg: DBMessage) => ({
           id: msg.id,
           role: msg.role as AIMessage['role'],
           content: msg.content
         })),
-        ...initialMessages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
+        ...messages.filter((msg: AIMessage) => msg.role !== 'system' && msg.id !== userMessage.id).map((msg: AIMessage) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
@@ -328,16 +409,19 @@ export async function POST(request: Request) {
       // Debug logging for message processing
       console.log('[DEBUG] [chat] Processing messages:', {
         totalMessages: processedMessages.length,
-        systemMessages: processedMessages.filter(msg => msg.role === 'system').length,
+        systemMessages: processedMessages.filter((msg: AIMessage) => msg.role === 'system').length,
         systemMessageSummary: processedMessages
-          .filter(msg => msg.role === 'system')
-          .map(msg => ({
+          .filter((msg: AIMessage) => msg.role === 'system')
+          .map((msg: AIMessage) => ({
             id: msg.id,
             contentPreview: typeof msg.content === 'string' 
               ? `${msg.content.substring(0, 100)}...` 
               : 'Non-string content'
           }))
       });
+
+      // Log which model is being used
+      console.log(`[CHAT MODEL] Using model: ${selectedChatModel}`);
 
       const chat = await getChatById({ id });
 
@@ -347,7 +431,8 @@ export async function POST(request: Request) {
           id, 
           userId: session.user.id, 
           title,
-          visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private'
+          visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private',
+          model: selectedChatModel
         });
       } else {
         // Check if user has permission to modify this chat
@@ -358,8 +443,19 @@ export async function POST(request: Request) {
 
       return createDataStreamResponse({
         execute: (dataStream) => {
+          console.log(`[CHAT REQUEST] Starting chat request with model: ${selectedChatModel}`);
+          
+          // Debug the actual model being used in the API call
+          const apiModel = myProvider.languageModel(selectedChatModel);
+          console.log(`[CHAT REQUEST] API model details:`, {
+            selectedChatModel,
+            apiModel: typeof apiModel,
+            apiModelStringified: String(apiModel).substring(0, 100),
+            providerModels: Object.keys(myProvider).filter(key => !key.startsWith('_'))
+          });
+          
           const result = streamText({
-            model: myProvider.languageModel(selectedChatModel),
+            model: apiModel,
             system: systemPrompt({ selectedChatModel }),
             messages: processedMessages,
             maxSteps: 5,
@@ -377,6 +473,8 @@ export async function POST(request: Request) {
               }),
             },
             onFinish: async ({ response, reasoning }) => {
+              console.log(`[CHAT RESPONSE] Completed chat response with model: ${selectedChatModel}`);
+              
               if (session.user?.id) {
                 try {
                   const sanitizedResponseMessages = sanitizeResponseMessages({
@@ -385,14 +483,15 @@ export async function POST(request: Request) {
                   });
 
                   const savedMessages = await saveMessages({
-                    messages: sanitizedResponseMessages.map((message) => {
+                    messages: sanitizedResponseMessages.map((message: AIMessage) => {
                       return {
                         id: generateUUID(),
                         chatId: id,
                         role: message.role,
                         content: message.content,
                         createdAt: new Date().toISOString(),
-                        type: 'message'
+                        type: 'message',
+                        model: selectedChatModel
                       };
                     }),
                   });
@@ -439,18 +538,19 @@ export async function POST(request: Request) {
           content: userMessage.content,
           createdAt: new Date().toISOString(), 
           chatId: id, 
-          type: 'message' 
+          type: 'message',
+          model: selectedChatModel
         }],
       });
 
       // Keep existing system messages and strip attachments from all messages
       processedMessages = [
-        ...existingSystemMessages.map(msg => ({
+        ...existingSystemMessages.map((msg: AIMessage) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
         })),
-        ...initialMessages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
+        ...messages.filter((msg: AIMessage) => msg.role !== 'system' && msg.id !== userMessage.id).map((msg: AIMessage) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
@@ -471,7 +571,8 @@ export async function POST(request: Request) {
         id, 
         userId: session.user.id, 
         title,
-        visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private'
+        visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private',
+        model: selectedChatModel
       });
     } else {
       // Check if user has permission to modify this chat
@@ -482,8 +583,18 @@ export async function POST(request: Request) {
 
     return createDataStreamResponse({
       execute: (dataStream) => {
+        console.log(`[CHAT REQUEST] Starting second chat request with model: ${selectedChatModel}`);
+        const apiModel = myProvider.languageModel(selectedChatModel);
+        
+        // Log basic information about the selected model
+        console.log(`[CHAT REQUEST] Second API model details:`, {
+          selectedChatModel,
+          apiModelType: typeof apiModel,
+          apiModelString: String(apiModel).substring(0, 100)
+        });
+        
         const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
+          model: apiModel,
           system: systemPrompt({ selectedChatModel }),
           messages: processedMessages,
           maxSteps: 5,
@@ -501,6 +612,8 @@ export async function POST(request: Request) {
             }),
           },
           onFinish: async ({ response, reasoning }) => {
+            console.log(`[CHAT RESPONSE] Completed chat response with model: ${selectedChatModel}`);
+            
             if (session.user?.id) {
               try {
                 const sanitizedResponseMessages = sanitizeResponseMessages({
@@ -509,14 +622,15 @@ export async function POST(request: Request) {
                 });
 
                 const savedMessages = await saveMessages({
-                  messages: sanitizedResponseMessages.map((message) => {
+                  messages: sanitizedResponseMessages.map((message: AIMessage) => {
                     return {
                       id: generateUUID(),
                       chatId: id,
                       role: message.role,
                       content: message.content,
                       createdAt: new Date().toISOString(),
-                      type: 'message'
+                      type: 'message',
+                      model: selectedChatModel
                     };
                   }),
                 });

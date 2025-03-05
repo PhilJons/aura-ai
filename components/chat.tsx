@@ -4,7 +4,7 @@ import type { Attachment, Message, ChatRequestOptions } from 'ai';
 import { useChat } from 'ai/react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
 import { ChatHeader } from '@/components/chat-header';
@@ -17,6 +17,25 @@ import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
 import type { VisibilityType } from './visibility-selector';
 import { toast } from 'sonner';
+import { usePersistentAttachments } from '@/lib/hooks/use-persistent-attachments';
+import { PersistentAttachments } from './persistent-attachments';
+import { ModelSelector } from '@/components/model-selector';
+import { VisibilitySelector } from '@/components/visibility-selector';
+
+// Map URL parameter values to internal model IDs
+const URL_MODEL_MAP: Record<string, string> = {
+  'gpt-4o': 'chat-model-large',
+  'gpt-4o-mini': 'chat-model-small'
+};
+
+// Reverse mapping for internal model IDs to URL parameter values
+const INTERNAL_MODEL_MAP: Record<string, string> = {
+  'chat-model-large': 'gpt-4o',
+  'chat-model-small': 'gpt-4o-mini'
+};
+
+// Default model if no parameter is present
+const DEFAULT_MODEL = 'chat-model-small';
 
 export function Chat({
   id,
@@ -36,6 +55,17 @@ export function Chat({
   const [isExistingChat, setIsExistingChat] = useState(false);
   const router = useRouter();
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  
+  // Get model from URL parameter
+  const urlModel = searchParams.get('model');
+  
+  // Use persistent attachments hook
+  const { 
+    persistentAttachments, 
+    addPersistentAttachments,
+    clearPersistentAttachments
+  } = usePersistentAttachments(id);
 
   // Fetch chat data
   const { data: chat, error: chatError } = useSWR(
@@ -47,6 +77,33 @@ export function Chat({
       shouldRetryOnError: false
     }
   );
+  
+  // Determine effective model based on URL parameter, chat data, and props
+  const effectiveModel = useMemo(() => {
+    // For existing chats with messages, prioritize the chat's stored model
+    if (isExistingChat && chat?.model) {
+      return chat.model;
+    }
+    
+    // For new chats or chats without a stored model, use URL parameter
+    if (urlModel && URL_MODEL_MAP[urlModel]) {
+      return URL_MODEL_MAP[urlModel];
+    }
+    
+    // Fallback to props or default
+    return selectedChatModel || DEFAULT_MODEL;
+  }, [urlModel, chat?.model, selectedChatModel, isExistingChat]);
+
+  // Log model selection for debugging
+  useEffect(() => {
+    console.log("Chat - model selection:", {
+      urlModel,
+      chatModel: chat?.model,
+      selectedChatModel,
+      effectiveModel,
+      isExistingChat
+    });
+  }, [urlModel, chat?.model, selectedChatModel, effectiveModel, isExistingChat]);
 
   // Fetch messages if not provided
   const { data: fetchedMessages } = useSWR(
@@ -56,9 +113,10 @@ export function Chat({
   );
 
   // Fetch votes
-  const { data: votes } = useSWR<Array<Vote>>(
-    `/api/vote?chatId=${id}`,
+  const { data: votes } = useSWR(
+    `/api/chat/vote?chatId=${id}`,
     fetcher,
+    { fallbackData: [], revalidateOnFocus: true }
   );
 
   // Determine if the chat is readonly based on ownership
@@ -103,11 +161,44 @@ export function Chat({
   debug('chat', 'Chat component mounted', {
     id,
     hasInitialMessages: messagesToUse.length > 0,
-    selectedChatModel: chat?.model || selectedChatModel,
+    selectedChatModel: effectiveModel,
     selectedVisibilityType: chat?.visibility || selectedVisibilityType,
     isReadonly: actualReadonly
   });
 
+  // Determine the API URL with model parameter
+  const apiUrl = useMemo(() => {
+    // Always include the model parameter in the API URL
+    const modelParam = urlModel || (INTERNAL_MODEL_MAP[effectiveModel] || 'gpt-4o-mini');
+    console.log("Chat - API URL model parameter:", modelParam, "from effectiveModel:", effectiveModel);
+    return `/api/chat?model=${modelParam}`;
+  }, [urlModel, effectiveModel]);
+
+  // Ensure the URL includes the model parameter
+  useEffect(() => {
+    if (!isExistingChat && typeof window !== 'undefined') {
+      const INTERNAL_MODEL_MAP: Record<string, string> = {
+        'chat-model-large': 'gpt-4o',
+        'chat-model-small': 'gpt-4o-mini'
+      };
+      
+      const currentUrl = new URL(window.location.href);
+      const expectedModelParam = INTERNAL_MODEL_MAP[effectiveModel] || 'gpt-4o-mini';
+      const currentModelParam = currentUrl.searchParams.get('model');
+      
+      if (currentModelParam !== expectedModelParam) {
+        console.log("Chat - Updating URL model parameter:", {
+          from: currentModelParam,
+          to: expectedModelParam
+        });
+        
+        currentUrl.searchParams.set('model', expectedModelParam);
+        window.history.replaceState({}, '', currentUrl.toString());
+      }
+    }
+  }, [effectiveModel, isExistingChat]);
+
+  // Set up chat hooks
   const {
     messages,
     setMessages,
@@ -120,14 +211,70 @@ export function Chat({
     reload,
   } = useChat({
     id,
-    body: { id, selectedChatModel: chat?.model || selectedChatModel },
+    body: { 
+      id, 
+      selectedChatModel: effectiveModel,
+      modelParam: urlModel || (INTERNAL_MODEL_MAP[effectiveModel] || 'gpt-4o-mini')
+    },
     initialMessages: messagesToUse,
     experimental_throttle: 100,
     sendExtraMessageFields: true,
     generateId: generateUUID,
-    api: actualReadonly ? undefined : '/api/chat', // Disable API if readonly
+    api: actualReadonly ? undefined : apiUrl,
     headers: {
       'x-visibility-type': chat?.visibility || selectedVisibilityType
+    },
+    onResponse: (response) => {
+      // If this is a new chat, update the URL with the chat ID while preserving the model parameter
+      if (!isExistingChat) {
+        setIsExistingChat(true);
+        
+        // Get the chat ID from the response URL
+        const responseUrl = response.url;
+        const match = responseUrl.match(/\/chat\/([^\/\?]+)/);
+        if (match && match[1]) {
+          const newChatId = match[1];
+          
+          // Get the current model parameter
+          const INTERNAL_MODEL_MAP: Record<string, string> = {
+            'chat-model-large': 'gpt-4o',
+            'chat-model-small': 'gpt-4o-mini'
+          };
+          
+          // If we have a URL parameter, use it directly
+          // Otherwise, map the effective model to a URL parameter
+          const modelParam = urlModel || INTERNAL_MODEL_MAP[effectiveModel] || 'gpt-4o-mini';
+          
+          // For debugging, log what model we're actually using
+          console.log("Chat - onResponse - Model selection:", {
+            urlModel,
+            effectiveModel,
+            mappedModel: INTERNAL_MODEL_MAP[effectiveModel],
+            finalModelParam: modelParam
+          });
+          
+          // Preserve the model parameter when redirecting to the new chat
+          const modelQueryParam = `?model=${modelParam}`;
+          
+          console.log("Chat - onResponse - Updating URL:", {
+            newChatId,
+            modelParam,
+            fullUrl: `/chat/${newChatId}${modelQueryParam}`
+          });
+          
+          // Use window.history to update the URL without causing a full page reload
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(
+              {}, 
+              '', 
+              `/chat/${newChatId}${modelQueryParam}`
+            );
+            
+            // Also update the router to ensure Next.js internal state is updated
+            router.replace(`/chat/${newChatId}${modelQueryParam}`, { scroll: false });
+          }
+        }
+      }
     },
     onFinish: () => {
       debug('chat', 'Chat message finished', {
@@ -195,17 +342,63 @@ export function Chat({
     event?: { preventDefault?: () => void } | undefined,
     chatRequestOptions?: ChatRequestOptions | undefined
   ) => {
-    debug('chat', 'Handling submit', {
+    console.log('Chat - handleSubmit - Starting submission', {
       id,
       hasInput: !!input.trim(),
       isLoading,
       attachmentCount: attachments.length,
-      isReadonly: actualReadonly
+      persistentAttachmentCount: persistentAttachments.length,
+      isReadonly: actualReadonly,
+      chatRequestOptions,
+      effectiveModel,
+      urlModel
     });
 
     if (!input.trim() || isLoading) return;
 
-    if (attachments.length > 0) {
+    // Add any new attachments to the persistent list if they are images
+    const imageAttachments = attachments.filter(a => a.contentType?.startsWith('image/'));
+    console.log('Chat - handleSubmit - Image attachments to add to persistent:', {
+      count: imageAttachments.length,
+      attachments: imageAttachments.map(a => ({
+        name: a.name,
+        contentType: a.contentType,
+        url: a.url?.substring(0, 30) + '...'
+      }))
+    });
+    
+    if (imageAttachments.length > 0) {
+      addPersistentAttachments(imageAttachments);
+      console.log('Chat - handleSubmit - Added images to persistent attachments, new count:', persistentAttachments.length + imageAttachments.length);
+    }
+
+    // Combine current attachments with persistent attachments
+    const allAttachments = [
+      ...attachments,
+      // Only include persistent attachments that aren't already in the current attachments
+      ...persistentAttachments.filter(pa => 
+        !attachments.some(a => a.url === pa.url)
+      )
+    ];
+    
+    console.log('Chat - handleSubmit - All attachments to send:', {
+      count: allAttachments.length,
+      attachments: allAttachments.map(a => ({
+        name: a.name,
+        contentType: a.contentType,
+        url: a.url?.substring(0, 30) + '...'
+      }))
+    });
+
+    // Get the current model parameter for the API request
+    const INTERNAL_MODEL_MAP: Record<string, string> = {
+      'chat-model-large': 'gpt-4o',
+      'chat-model-small': 'gpt-4o-mini'
+    };
+    const modelParam = urlModel || INTERNAL_MODEL_MAP[effectiveModel] || 'gpt-4o-mini';
+    console.log('Chat - handleSubmit - Using model parameter:', modelParam);
+
+    if (allAttachments.length > 0) {
       setIsProcessingFile(true);
       
       // Start processing
@@ -215,46 +408,74 @@ export function Chat({
       await new Promise(resolve => setTimeout(resolve, 100));
       
       try {
+        console.log('Chat - handleSubmit - Sending message with attachments', {
+          attachmentsCount: allAttachments.length,
+          persistentAttachmentsCount: persistentAttachments.length,
+          persistentAttachmentDetails: persistentAttachments.map(a => ({
+            name: a.name,
+            contentType: a.contentType,
+            url: a.url?.substring(0, 30) + '...'
+          })),
+          modelParam
+        });
+        
         await originalHandleSubmit(event, {
           ...chatRequestOptions,
           body: {
             ...chatRequestOptions?.body,
-            attachments,
+            attachments: allAttachments,
+            persistentAttachments: persistentAttachments,
+            selectedChatModel: effectiveModel,
+            modelParam
           },
         });
+        // Only clear temporary attachments, not persistent ones
         setAttachments([]);
+        console.log('Chat - handleSubmit - Message with attachments sent successfully');
       } catch (err) {
-        debug('chat', 'Error sending message with attachments', {
-          id,
-          error: err instanceof Error ? err.message : 'Unknown error'
-        });
-        console.error("Error sending message:", err);
+        console.error("Chat - handleSubmit - Error sending message with attachments:", err);
         toast.error("Failed to send message. Please try again.");
         markFileUploadComplete(id);
       }
     } else {
       try {
-        await originalHandleSubmit(event, chatRequestOptions);
-      } catch (err) {
-        debug('chat', 'Error sending message', {
-          id,
-          error: err instanceof Error ? err.message : 'Unknown error'
+        console.log('Chat - handleSubmit - Sending message without attachments but with persistent attachments', {
+          persistentAttachmentsCount: persistentAttachments.length,
+          persistentAttachmentDetails: persistentAttachments.map(a => ({
+            name: a.name,
+            contentType: a.contentType,
+            url: a.url?.substring(0, 30) + '...'
+          })),
+          modelParam
         });
-        console.error("Error sending message:", err);
+        
+        await originalHandleSubmit(event, {
+          ...chatRequestOptions,
+          body: {
+            ...chatRequestOptions?.body,
+            persistentAttachments: persistentAttachments,
+            selectedChatModel: effectiveModel,
+            modelParam
+          },
+        });
+        console.log('Chat - handleSubmit - Message without attachments sent successfully');
+      } catch (err) {
+        console.error("Chat - handleSubmit - Error sending message:", err);
         toast.error("Failed to send message. Please try again.");
       }
     }
-  }, [attachments, input, isLoading, originalHandleSubmit, id, actualReadonly]);
+  }, [attachments, persistentAttachments, input, isLoading, originalHandleSubmit, id, actualReadonly, addPersistentAttachments, effectiveModel, urlModel]);
 
   return (
-    <div className="flex flex-col min-w-0 h-dvh bg-background">
+    <div className="flex flex-col h-full max-h-[calc(100vh-3.5rem)] overflow-hidden">
       <ChatHeader
         chatId={id}
-        selectedModelId={chat?.model || selectedChatModel}
+        selectedModelId={effectiveModel}
         selectedVisibilityType={chat?.visibility || selectedVisibilityType}
         isReadonly={actualReadonly}
         isLoading={isLoading}
         isProcessingFile={isProcessingFile}
+        hasMessages={messages.some((msg: Message) => msg.role === 'user' || msg.role === 'assistant')}
       />
 
       <Messages
@@ -270,24 +491,26 @@ export function Chat({
         handleSubmit={handleSubmit}
       />
 
-      <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
+      <form className="flex flex-col mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
         {!actualReadonly && (
-          <MultimodalInput
-            chatId={id}
-            input={input}
-            setInput={setInput}
-            handleSubmit={handleSubmit}
-            isLoading={isLoading}
-            stop={stop}
-            attachments={attachments}
-            setAttachments={setAttachments}
-            messages={messages}
-            setMessages={setMessages}
-            append={append}
-            selectedChatModel={chat?.model || selectedChatModel}
-            setIsProcessingFile={setIsProcessingFile}
-            isExistingChat={isExistingChat}
-          />
+          <>
+            <MultimodalInput
+              chatId={id}
+              input={input}
+              setInput={setInput}
+              handleSubmit={handleSubmit}
+              isLoading={isLoading}
+              stop={stop}
+              attachments={attachments}
+              setAttachments={setAttachments}
+              messages={messages}
+              setMessages={setMessages}
+              append={append}
+              selectedChatModel={chat?.model || selectedChatModel}
+              setIsProcessingFile={setIsProcessingFile}
+              isExistingChat={isExistingChat}
+            />
+          </>
         )}
       </form>
     </div>

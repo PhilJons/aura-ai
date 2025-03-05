@@ -91,6 +91,7 @@ interface ChatHeaderProps {
   isReadonly: boolean;
   isLoading: boolean;
   isProcessingFile: boolean;
+  hasMessages: boolean;
 }
 
 function PureChatHeader({
@@ -100,6 +101,7 @@ function PureChatHeader({
   isReadonly,
   isLoading,
   isProcessingFile,
+  hasMessages,
 }: ChatHeaderProps) {
   const router = useRouter();
   const { open } = useSidebar();
@@ -134,6 +136,7 @@ function PureChatHeader({
         <ModelSelector 
           selectedModelId={selectedModelId} 
           className="order-1 md:order-2"
+          isDisabled={hasMessages}
         />
         <VisibilitySelector
           chatId={chatId}
@@ -150,6 +153,11 @@ function PureChatHeader({
 }
 
 export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
+  // Only re-render when these specific props change
   return prevProps.selectedModelId === nextProps.selectedModelId &&
-         prevProps.isLoading === nextProps.isLoading;
+         prevProps.selectedVisibilityType === nextProps.selectedVisibilityType &&
+         prevProps.isLoading === nextProps.isLoading &&
+         prevProps.isProcessingFile === nextProps.isProcessingFile &&
+         prevProps.isReadonly === nextProps.isReadonly &&
+         prevProps.hasMessages === nextProps.hasMessages;
 });
