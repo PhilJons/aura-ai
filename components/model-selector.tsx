@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { chatModels } from '@/lib/ai/models';
 import { cn } from '@/lib/utils';
+import { trackModelSelection } from '@/lib/client-analytics';
 
 import { CheckCircleFillIcon, ChevronDownIcon } from './icons';
 
@@ -57,6 +58,7 @@ export function ModelSelector({
                 startTransition(() => {
                   setOptimisticModelId(id);
                   saveChatModelAsCookie(id);
+                  trackModelSelection(id);
                 });
               }}
               className="gap-4 group/item flex flex-row justify-between items-center"

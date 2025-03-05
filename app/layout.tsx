@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Toaster } from 'sonner';
 
 import { ThemeProvider } from '@/components/theme-provider';
+import { Analytics } from '@/components/analytics';
 
 import './globals.css';
 
@@ -84,6 +85,7 @@ export default async function RootLayout({
         >
           <Toaster position="top-center" />
           {children}
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>

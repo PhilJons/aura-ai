@@ -12,6 +12,7 @@ import type { Vote } from '@/lib/db/schema';
 import { fetcher, generateUUID } from '@/lib/utils';
 import { markFileUploadStarted, markFileUploadComplete } from '@/lib/utils/stream';
 import { debug } from '@/lib/utils/debug';
+import { trackNewChatStarted } from '@/lib/client-analytics';
 
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
@@ -36,6 +37,14 @@ export function Chat({
   const [isExistingChat, setIsExistingChat] = useState(false);
   const router = useRouter();
   const { data: session } = useSession();
+
+  // Track new chat started
+  useEffect(() => {
+    // Only track if this is a new chat (no initial messages)
+    if (initialMessages.length === 0) {
+      trackNewChatStarted();
+    }
+  }, [initialMessages.length]);
 
   // Fetch chat data
   const { data: chat, error: chatError } = useSWR(

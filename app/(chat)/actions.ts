@@ -11,6 +11,7 @@ import {
 import type { VisibilityType } from '@/components/visibility-selector';
 import { myProvider, chatModels, DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import { containers } from '@/lib/db/cosmos';
+import { trackModelChanged } from '@/lib/analytics';
 
 export async function saveChatModelAsCookie(model: string) {
   // Validate that the model exists and is enabled
@@ -18,6 +19,14 @@ export async function saveChatModelAsCookie(model: string) {
   const modelToSave = isValidModel ? model : DEFAULT_CHAT_MODEL;
   
   const cookieStore = await cookies();
+  const previousModel = cookieStore.get('chat-model')?.value || DEFAULT_CHAT_MODEL;
+  
+  // Only track if the model is actually changing
+  if (previousModel !== modelToSave) {
+    // We don't have a chatId here, so we'll use 'global' to indicate this is a global setting change
+    await trackModelChanged('global', previousModel, modelToSave);
+  }
+  
   cookieStore.set('chat-model', modelToSave);
 }
 

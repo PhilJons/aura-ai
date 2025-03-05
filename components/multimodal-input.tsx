@@ -31,6 +31,7 @@ import { logger } from "@/lib/utils/logger";
 import { useDirectFileUpload } from "@/components/ui/direct-file-upload";
 import { cn } from "@/lib/utils";
 import { UploadProgress } from "@/components/upload-progress";
+import { trackFileUploaded } from '@/lib/analytics';
 
 // Icons
 function ArrowUpIcon({ size = 16 }: { size?: number }) {
@@ -223,11 +224,22 @@ function PureMultimodalInput({
       console.log("Upload started");
       setIsProcessingFile(true);
     },
-    onUploadComplete: (result) => {
+    onUploadComplete: async (result) => {
       console.log("Upload complete", result);
       if (result.success && result.attachments) {
         const newAttachments = result.attachments || [];
         setAttachments((prev) => [...prev, ...newAttachments]);
+        
+        // Track file uploads for each attachment
+        for (const attachment of newAttachments) {
+          if (attachment.contentType && attachment.size) {
+            await trackFileUploaded(
+              chatId,
+              attachment.contentType,
+              attachment.size
+            );
+          }
+        }
       }
       setIsProcessingFile(false);
       setUploadQueue((prev) => prev.slice(1));

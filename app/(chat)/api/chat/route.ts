@@ -26,6 +26,7 @@ import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { getEncoding } from 'js-tiktoken';
 import { processDocument, } from '@/lib/azure/document';
+import { trackChatCreated, trackMessageSent, trackModelUsed } from '@/lib/analytics';
 
 // Maximum tokens we want to allow for the context (8k for GPT-4)
 const MAX_CONTEXT_TOKENS = 8000;
@@ -106,10 +107,31 @@ export async function POST(request: Request) {
     }: { id: string; messages: Array<AIMessage>; selectedChatModel: string } =
       await request.json();
 
+    // Check if this is a new chat
+    const existingChat = await getChatById({ id });
+    const isNewChat = !existingChat;
+    
+    if (isNewChat) {
+      // Track new chat creation
+      await trackChatCreated(id);
+    }
+    
+    // Track which model is being used for this message
+    await trackModelUsed(id, selectedChatModel);
+
     const userMessage = getMostRecentUserMessage(initialMessages);
     if (!userMessage) {
       return new Response('No user message found', { status: 400 });
     }
+
+    // Track the user message being sent
+    await trackMessageSent(
+      id, 
+      'user', 
+      typeof userMessage.content === 'string' 
+        ? userMessage.content.length 
+        : JSON.stringify(userMessage.content).length
+    );
 
     const attachments = userMessage.experimental_attachments;
     let processedMessages = [...initialMessages];
@@ -403,6 +425,18 @@ export async function POST(request: Request) {
                       messages: savedMessages
                     })
                   });
+
+                  // Track the assistant message
+                  if (savedMessages.length > 0) {
+                    const assistantMessage = savedMessages.find(msg => msg.role === 'assistant');
+                    if (assistantMessage) {
+                      await trackMessageSent(
+                        id,
+                        'assistant',
+                        assistantMessage.content.length
+                      );
+                    }
+                  }
                 } catch (error) {
                   console.error('Failed to save chat');
                 }
@@ -527,6 +561,18 @@ export async function POST(request: Request) {
                     messages: savedMessages
                   })
                 });
+
+                // Track the assistant message
+                if (savedMessages.length > 0) {
+                  const assistantMessage = savedMessages.find(msg => msg.role === 'assistant');
+                  if (assistantMessage) {
+                    await trackMessageSent(
+                      id,
+                      'assistant',
+                      assistantMessage.content.length
+                    );
+                  }
+                }
               } catch (error) {
                 console.error('Failed to save chat');
               }
@@ -555,8 +601,8 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error('Error in chat stream:', error);
-    return new Response('Error in chat stream', { status: 500 });
+    console.error('Error in POST handler:', error);
+    return new Response('Error', { status: 500 });
   }
 }
 
