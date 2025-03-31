@@ -776,7 +776,7 @@ function PureSendButton({
       onClick={submitForm}
       disabled={!input.trim() && uploadQueue.length === 0}
       className={cx(
-        "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md border bg-background text-foreground transition-colors hover:bg-accent",
+        "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border bg-background text-foreground transition-colors hover:bg-accent",
         (!input.trim() && uploadQueue.length === 0) && "opacity-40"
       )}
       aria-label="Send message"

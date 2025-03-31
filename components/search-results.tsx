@@ -277,7 +277,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
                       {result.title || result.content.substring(0, 100)}
                     </p>
                     <div className="mt-2 flex items-center space-x-1">
-                      <Avatar className="size-4 flex-shrink-0">
+                      <Avatar className="size-4 shrink-0">
                         <AvatarImage
                           src={`https://www.google.com/s2/favicons?domain=${getHostname(result.url)}`}
                           alt={getHostname(result.url)}
@@ -318,7 +318,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
             key={index}
             className="block h-full"
           >
-            <div className="border rounded-md p-2 h-full hover:bg-muted/50 transition-colors flex flex-col">
+            <div className="border rounded-md p-2 size-full hover:bg-muted/50 transition-colors flex flex-col">
               <p className="text-xs line-clamp-2 min-h-8 font-medium text-blue-600 dark:text-blue-400 mb-auto">
                 {result.title || result.content}
               </p>

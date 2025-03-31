@@ -175,110 +175,115 @@ interface GroupedSearchSectionProps {
 }
 
 export function GroupedSearchSection({ invocations, chatId }: GroupedSearchSectionProps) {
-  try {
-    // State for controlling collapse state  
-    const [isOpen, setIsOpen] = useState(true);
-    // Create a local state to force re-renders during streaming
-    const [renderKey, setRenderKey] = useState(Date.now());
-    
-    // Safely extract queries
-    const allQueries = useMemo(() => {
-      try {
-        return [...new Set(invocations
-          .filter(inv => inv && inv.args)
-          .map(inv => inv.args?.query as string)
-          .filter(Boolean)
-        )];
-      } catch (e) {
-        return [];
-      }
-    }, [invocations]);
-    
-    // Determine if any search is still in progress
-    const isSearchLoading = useMemo(() => {
+  // Initialize all hooks at the top level, outside of any conditionals or try-catch
+  // State for controlling collapse state  
+  const [isOpen, setIsOpen] = useState(true);
+  // Create a local state to force re-renders during streaming
+  const [renderKey, setRenderKey] = useState(Date.now());
+  
+  // Process invocations safely
+  const allQueries = useMemo(() => {
+    try {
+      return [...new Set(invocations
+        .filter(inv => inv && inv.args)
+        .map(inv => inv.args?.query as string)
+        .filter(Boolean)
+      )];
+    } catch (e) {
+      return [];
+    }
+  }, [invocations]);
+  
+  // Determine if any search is still in progress
+  const isSearchLoading = useMemo(() => {
+    try {
       return invocations.some(inv => inv?.state === 'call' && (
         inv?.toolName === 'search' || 
         (typeof inv?.toolName === 'string' && inv?.toolName.includes('search'))
       ));
-    }, [invocations]);
-    
-    // Force a re-render when invocations change to ensure streaming updates
-    useEffect(() => {
-      const forceUpdate = () => {
-        setRenderKey(Date.now());
-      };
+    } catch (e) {
+      return false;
+    }
+  }, [invocations]);
+  
+  // Extract results with proper error handling
+  const aggregatedResults = useMemo(() => {
+    try {
+      // Create a fallback result
+      const createFallbackResult = (query: string): SearchResultItem => ({
+        title: `Search results for "${query || 'your query'}"`,
+        content: "Search results will appear here",
+        url: "about:blank"
+      });
       
-      // Check for streaming state
-      if (invocations.length > 0) {
-        // Set an interval to force updates during streaming
-        const intervalId = setInterval(forceUpdate, 200);
-        return () => clearInterval(intervalId);
+      // If no data, return fallback
+      if (!invocations || !invocations.length) {
+        return allQueries.length ? allQueries.map(createFallbackResult) : [];
       }
-    }, [invocations.length]);
-    
-    // Extract results with proper error handling
-    const aggregatedResults = useMemo(() => {
-      try {
-        // Create a fallback result
-        const createFallbackResult = (query: string): SearchResultItem => ({
-          title: `Search results for "${query || 'your query'}"`,
-          content: "Search results will appear here",
-          url: "about:blank"
-        });
-        
-        // If no data, return fallback
-        if (!invocations || !invocations.length) {
-          return allQueries.length ? allQueries.map(createFallbackResult) : [];
-        }
-        
-        // Process invocations to extract results
-        const extractedResults: SearchResultItem[] = [];
-        
-        for (const inv of invocations) {
-          try {
-            if (!inv || inv.state !== 'result') continue;
-            
-            const result = (inv as any).result;
-            if (!result) continue;
-            
-            if (Array.isArray(result)) {
-              extractedResults.push(...result);
-            }
-            else if (typeof result === 'object' && result && 'results' in result && Array.isArray(result.results)) {
-              extractedResults.push(...result.results);
-            }
-            else if (typeof result === 'string') {
-              try {
-                const parsed = JSON.parse(result);
-                if (Array.isArray(parsed)) {
-                  extractedResults.push(...parsed);
-                }
-                else if (parsed && typeof parsed === 'object' && 'results' in parsed && Array.isArray(parsed.results)) {
-                  extractedResults.push(...parsed.results);
-                }
-              } catch {}
-            }
-          } catch {}
-        }
-        
-        // Always return something
-        return extractedResults.length > 0 ? extractedResults : 
-               allQueries.length ? allQueries.map(createFallbackResult) : [];
-      } catch (e) {
-        return [];
+      
+      // Process invocations to extract results
+      const extractedResults: SearchResultItem[] = [];
+      
+      for (const inv of invocations) {
+        try {
+          if (!inv || inv.state !== 'result') continue;
+          
+          const result = (inv as any).result;
+          if (!result) continue;
+          
+          if (Array.isArray(result)) {
+            extractedResults.push(...result);
+          }
+          else if (typeof result === 'object' && result && 'results' in result && Array.isArray(result.results)) {
+            extractedResults.push(...result.results);
+          }
+          else if (typeof result === 'string') {
+            try {
+              const parsed = JSON.parse(result);
+              if (Array.isArray(parsed)) {
+                extractedResults.push(...parsed);
+              }
+              else if (parsed && typeof parsed === 'object' && 'results' in parsed && Array.isArray(parsed.results)) {
+                extractedResults.push(...parsed.results);
+              }
+            } catch {}
+          }
+        } catch {}
       }
-    }, [invocations, allQueries]);
+      
+      // Always return something
+      return extractedResults.length > 0 ? extractedResults : 
+             allQueries.length ? allQueries.map(createFallbackResult) : [];
+    } catch (e) {
+      return [];
+    }
+  }, [invocations, allQueries]);
 
+  // Force a re-render when invocations change to ensure streaming updates
+  useEffect(() => {
+    const forceUpdate = () => {
+      setRenderKey(Date.now());
+    };
+    
+    // Check for streaming state
+    if (invocations.length > 0) {
+      // Set an interval to force updates during streaming
+      const intervalId = setInterval(forceUpdate, 200);
+      return () => clearInterval(intervalId);
+    }
+  }, [invocations.length]);
+
+  try {
     // Create simple header content
     const headerContent = (
       <div className="flex flex-wrap gap-x-2 gap-y-1 p-1 items-center">
-        <span className="font-medium mr-1 flex-shrink-0">Search Results:</span>
+        <span className="font-medium mr-1 shrink-0">Search Results:</span>
         {allQueries.map((q, i) => (
           <span key={i} className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-muted whitespace-nowrap">
             <span className="truncate max-w-[200px] sm:max-w-xs">{q || 'Query'}</span>
           </span>
         ))}
-        <span className="text-xs text-muted-foreground ml-auto flex-shrink-0 pl-2">
+        <span className="text-xs text-muted-foreground ml-auto shrink-0 pl-2">
           ({aggregatedResults.length} results)
         </span>
       </div>

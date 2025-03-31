@@ -382,12 +382,12 @@ const PurePreviewMessage = ({
                                           rel="noopener noreferrer"
                                           className="block h-full"
                                         >
-                                          <div className="border rounded-md p-2 h-full hover:bg-muted/50 transition-colors flex flex-col">
-                                            <p className="text-xs line-clamp-1 font-medium text-blue-600 dark:text-blue-400 text-left">
-                                              {previewResults[0].title || previewResults[0].content.substring(0, 60)}
+                                          <div className="border rounded-md p-2 size-full hover:bg-muted/50 transition-colors flex flex-col">
+                                            <p className="text-xs line-clamp-2 font-medium text-blue-600 dark:text-blue-400 mb-auto">
+                                              {previewResults[0].title || previewResults[0].content}
                                             </p>
                                             <div className="mt-1 flex items-center space-x-1">
-                                              <Avatar className="size-3 flex-shrink-0">
+                                              <Avatar className="size-3 shrink-0">
                                                 <AvatarImage
                                                   src={`https://www.google.com/s2/favicons?domain=${getHostname(previewResults[0].url)}`}
                                                   alt={getHostname(previewResults[0].url)}

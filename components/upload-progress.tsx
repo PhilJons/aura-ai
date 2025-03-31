@@ -130,11 +130,12 @@ export function UploadProgress({ uploadProgress, className }: UploadProgressProp
       }
     });
     
+    // Store a reference to the current ref value to avoid closure issues
+    const currentAnimationIntervals = animationIntervalsRef.current;
+    
     // Cleanup function
     return () => {
-      // Copy the ref value to avoid using it directly in cleanup
-      const intervalsToClear = { ...animationIntervalsRef.current }; 
-      Object.values(intervalsToClear).forEach(interval => {
+      Object.values(currentAnimationIntervals).forEach(interval => {
         clearInterval(interval);
       });
     };

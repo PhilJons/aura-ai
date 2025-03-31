@@ -108,7 +108,7 @@ export function SidebarUserNav({ user }: { user: User }) {
         URL.revokeObjectURL(profileImage);
       }
     };
-  }, [session?.accessToken, user.image, user.name, user.email]);
+  }, [session?.accessToken, user.image, user.name, user.email, profileImage]);
 
   return (
     <SidebarMenu>
