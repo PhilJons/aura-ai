@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { UploadProgress } from "@/components/upload-progress";
 import { trackFileUploaded } from '@/lib/analytics';
 import { trackClientMessageSent, trackClientFileUploaded } from '@/lib/client-analytics';
+import { SearchToggle } from '@/components/search-toggle';
 
 // Icons
 function ArrowUpIcon({ size = 16 }: { size?: number }) {
@@ -657,17 +658,19 @@ function PureMultimodalInput({
             }}
           />
 
-          <div className="flex w-full items-center justify-between">
-            <div className="flex items-center">
+          {/* Bottom menu area */}
+          <div className="flex items-center justify-between p-3">
+            <div className="flex items-center gap-2">
               <AttachmentsButton
                 className={cn(
-                  "absolute bottom-1 left-1 z-10 sm:left-2"
+                  "relative z-10"
                 )}
                 onClick={handleAttachmentClick}
                 disabled={isLoading}
               >
                 <PlusIcon size={16} />
               </AttachmentsButton>
+              <SearchToggle />
             </div>
 
             <div className="flex items-center">

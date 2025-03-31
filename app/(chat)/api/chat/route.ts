@@ -27,6 +27,7 @@ import { getWeather } from '@/lib/ai/tools/get-weather';
 import { getEncoding } from 'js-tiktoken';
 import { processDocument, } from '@/lib/azure/document';
 import { trackChatCreated, trackMessageSent, trackModelUsed } from '@/lib/analytics';
+import { searchTool } from '@/lib/ai/tools/search';
 
 // Maximum tokens we want to allow for the context (8k for GPT-4)
 const MAX_CONTEXT_TOKENS = 8000;
@@ -108,6 +109,9 @@ export async function POST(request: Request) {
       selectedChatModel,
     }: { id: string; messages: Array<AIMessage>; selectedChatModel: string } =
       await request.json();
+
+    // Get the search-enabled state from the cookie
+    const isSearchEnabled = request.headers.get('x-search-enabled') === 'true';
 
     // Check if this is a new chat
     const existingChat = await getChatById({ id });
@@ -385,12 +389,13 @@ export async function POST(request: Request) {
         execute: (dataStream) => {
           const result = streamText({
             model: myProvider.languageModel(selectedChatModel),
-            system: systemPrompt({ selectedChatModel }),
+            system: systemPrompt({ selectedChatModel, isSearchEnabled }),
             messages: processedMessages,
             maxSteps: 5,
             experimental_activeTools: [
               'getWeather',
               'requestSuggestions',
+              ...(isSearchEnabled ? ['search'] : []),
             ],
             experimental_transform: smoothStream({ chunking: 'word' }),
             experimental_generateMessageId: generateUUID,
@@ -400,6 +405,7 @@ export async function POST(request: Request) {
                 session,
                 dataStream,
               }),
+              ...(isSearchEnabled ? { search: searchTool } : {}),
             },
             onFinish: async ({ response, reasoning }) => {
               if (session.user?.id) {
@@ -522,12 +528,13 @@ export async function POST(request: Request) {
       execute: (dataStream) => {
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel }),
+          system: systemPrompt({ selectedChatModel, isSearchEnabled }),
           messages: processedMessages,
           maxSteps: 5,
           experimental_activeTools: [
             'getWeather',
             'requestSuggestions',
+            ...(isSearchEnabled ? ['search'] : []),
           ],
           experimental_transform: smoothStream({ chunking: 'word' }),
           experimental_generateMessageId: generateUUID,
@@ -537,6 +544,7 @@ export async function POST(request: Request) {
               session,
               dataStream,
             }),
+            ...(isSearchEnabled ? { search: searchTool } : {}),
           },
           onFinish: async ({ response, reasoning }) => {
             if (session.user?.id) {

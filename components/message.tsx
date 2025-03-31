@@ -19,6 +19,8 @@ import { DocumentPreview } from "./document-preview";
 import { MessageReasoning } from "./message-reasoning";
 import { debug } from "@/lib/utils/debug";
 import { PreviewAttachment } from './preview-attachment';
+import { SearchResults } from './search-results';
+import { SearchResultItem } from '@/lib/ai/tools/search';
 
 interface DocumentToolInvocation {
   toolName: string;
@@ -303,6 +305,12 @@ const PurePreviewMessage = ({
                             result={result}
                             isReadonly={isReadonly}
                           />
+                        ) : toolName === 'search' ? (
+                          <SearchResults 
+                            results={((result as any)?.results || []) as SearchResultItem[]} 
+                            query={(result as any)?.query || ""}
+                            isLoading={false}
+                          />
                         ) : (
                           <pre>{JSON.stringify(result, null, 2)}</pre>
                         )}
@@ -331,6 +339,12 @@ const PurePreviewMessage = ({
                           type="request-suggestions"
                           args={args}
                           isReadonly={isReadonly}
+                        />
+                      ) : toolName === 'search' ? (
+                        <SearchResults 
+                          results={((args as any)?.results || []) as SearchResultItem[]} 
+                          query={(args as any)?.query || ""}
+                          isLoading={true}
                         />
                       ) : null}
                     </div>

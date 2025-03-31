@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { useSearchToggle } from '@/components/search-toggle';
 
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
@@ -38,6 +39,12 @@ export function Chat({
   const router = useRouter();
   const { data: session } = useSession();
   const userEmail = session?.user?.email;
+  const { isSearchEnabled } = useSearchToggle();
+
+  // Add debug logging for search toggle
+  useEffect(() => {
+    console.log(`[Search Toggle] Search is ${isSearchEnabled ? 'enabled' : 'disabled'}`);
+  }, [isSearchEnabled]);
 
   // Track new chat started
   useEffect(() => {
@@ -137,7 +144,8 @@ export function Chat({
     generateId: generateUUID,
     api: actualReadonly ? undefined : '/api/chat', // Disable API if readonly
     headers: {
-      'x-visibility-type': chat?.visibility || selectedVisibilityType
+      'x-visibility-type': chat?.visibility || selectedVisibilityType,
+      'x-search-enabled': isSearchEnabled.toString()
     },
     onFinish: () => {
       debug('chat', 'Chat message finished', {
