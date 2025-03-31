@@ -1,13 +1,12 @@
 'use client'
 
-import { CHAT_ID } from '@/lib/constants'
 import type { SearchResults as TypeSearchResults } from '@/lib/ai/tools/search'
 import { ToolInvocation } from 'ai'
 import { useChat } from 'ai/react'
-import { CollapsibleMessage } from './collapsible-message'
+import { CollapsibleMessage } from '@/components/collapsible-message'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SearchResults } from './search-results'
-import { Section, ToolArgsSection } from './section'
+import { Section, ToolArgsSection } from '@/components/section'
 
 interface SearchSectionProps {
   tool: ToolInvocation
@@ -24,7 +23,7 @@ export function SearchSkeleton() {
             <div className="p-2 h-full flex flex-col justify-between">
               <Skeleton className="w-full h-8" />
               <div className="flex items-center space-x-1 mt-2">
-                <Skeleton className="h-4 w-4 rounded-full" />
+                <Skeleton className="size-4 rounded-full" />
                 <Skeleton className="h-4 w-16" />
               </div>
             </div>
@@ -47,7 +46,7 @@ export function SearchSection({
   onOpenChange
 }: SearchSectionProps) {
   const { isLoading } = useChat({
-    id: CHAT_ID || ''
+    id: ''
   })
   const isToolLoading = tool.state === 'call'
   const searchResults: TypeSearchResults =
@@ -76,7 +75,8 @@ export function SearchSection({
       isOpen={isOpen}
       onOpenChange={onOpenChange}
     >
-      {searchResults &&
+      {/* TODO: Review or remove image search results section - searchResults type doesn't have 'images' */}
+      {/* {searchResults &&
         searchResults.images &&
         searchResults.images.length > 0 && (
           <Section>
@@ -85,7 +85,7 @@ export function SearchSection({
               query={query}
             />
           </Section>
-        )}
+        )} */}
       {isToolLoading ? (
         <SearchSkeleton />
       ) : searchResults?.results ? (

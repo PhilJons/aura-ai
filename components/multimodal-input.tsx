@@ -26,11 +26,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
-import { sanitizeUIMessages } from "@/lib/utils";
+import { sanitizeUIMessages, cn } from "@/lib/utils";
 import equal from "fast-deep-equal";
 import { logger } from "@/lib/utils/logger";
 import { useDirectFileUpload } from "@/components/ui/direct-file-upload";
-import { cn } from "@/lib/utils";
 import { UploadProgress } from "@/components/upload-progress";
 import { trackFileUploaded } from '@/lib/analytics';
 import { trackClientMessageSent, trackClientFileUploaded } from '@/lib/client-analytics';
@@ -457,7 +456,7 @@ function PureMultimodalInput({
     }
     
     console.log("Attachment removed:", attachmentToRemove.name || attachmentToRemove.url);
-  }, [attachments, setLocalStorageAttachments, chatId]);
+  }, [attachments, setLocalStorageAttachments, chatId, setAttachments]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">

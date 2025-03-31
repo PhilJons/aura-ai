@@ -143,7 +143,7 @@ export function PdfOverlay({
           </Button>
 
           {isLoadingSas ? (
-            <div className="flex items-center justify-center h-full w-full">
+            <div className="flex items-center justify-center size-full">
               <p className="text-foreground dark:text-zinc-300">
                 Loading secure PDF access...
               </p>
@@ -162,7 +162,7 @@ export function PdfOverlay({
               </p>
             </object>
           ) : (
-            <div className="flex items-center justify-center h-full w-full">
+            <div className="flex items-center justify-center size-full">
               <p className="text-foreground dark:text-zinc-300">
                 No PDF URL provided.
               </p>

@@ -23,7 +23,6 @@ import {
 import { emitDocumentContextUpdate } from '@/lib/utils/stream';
 import { generateTitleFromUserMessage } from '@/app/(chat)/actions';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
 import { getEncoding } from 'js-tiktoken';
 import { processDocument, } from '@/lib/azure/document';
 import { trackChatCreated, trackMessageSent, trackModelUsed } from '@/lib/analytics';
@@ -393,14 +392,14 @@ export async function POST(request: Request) {
             messages: processedMessages,
             maxSteps: 5,
             experimental_activeTools: [
-              'getWeather',
+              // 'getWeather',
               'requestSuggestions',
-              ...(isSearchEnabled ? ['search'] : []),
+              ...(isSearchEnabled ? ['search' as const] : []),
             ],
             experimental_transform: smoothStream({ chunking: 'word' }),
             experimental_generateMessageId: generateUUID,
             tools: {
-              getWeather,
+              // getWeather,
               requestSuggestions: requestSuggestions({
                 session,
                 dataStream,
@@ -532,14 +531,14 @@ export async function POST(request: Request) {
           messages: processedMessages,
           maxSteps: 5,
           experimental_activeTools: [
-            'getWeather',
+            // 'getWeather',
             'requestSuggestions',
-            ...(isSearchEnabled ? ['search'] : []),
+            ...(isSearchEnabled ? ['search' as const] : []),
           ],
           experimental_transform: smoothStream({ chunking: 'word' }),
           experimental_generateMessageId: generateUUID,
           tools: {
-            getWeather,
+            // getWeather,
             requestSuggestions: requestSuggestions({
               session,
               dataStream,

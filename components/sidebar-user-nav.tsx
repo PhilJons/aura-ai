@@ -4,6 +4,7 @@ import type { User } from 'next-auth';
 import { signOut, useSession } from 'next-auth/react';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 import {
   DropdownMenu,
@@ -107,7 +108,7 @@ export function SidebarUserNav({ user }: { user: User }) {
         URL.revokeObjectURL(profileImage);
       }
     };
-  }, [session?.accessToken, user, user.image]);
+  }, [session?.accessToken, user, user.image, profileImage]);
 
   return (
     <SidebarMenu>
@@ -116,7 +117,7 @@ export function SidebarUserNav({ user }: { user: User }) {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent bg-background data-[state=open]:text-sidebar-accent-foreground h-10">
               {!isLoadingImage && profileImage ? (
-                <img
+                <Image
                   src={profileImage}
                   alt={userName ?? 'User Avatar'}
                   width={24}
@@ -125,7 +126,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   onError={() => setProfileImage(null)}
                 />
               ) : (
-                <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
+                <div className="size-6 rounded-full bg-muted flex items-center justify-center">
                   <span className="text-xs font-medium">
                     {userName?.charAt(0) ?? user.email?.charAt(0)}
                   </span>

@@ -88,7 +88,7 @@ function PureMessages({
       });
       prevStateRef.current = currentState;
     }
-  }, [messageDebugData, isLoading, isReadonly, chatId]);
+  }, [messageDebugData, isLoading, isReadonly, chatId, messages.length]);
 
   // Filter out system messages containing document intelligence analysis
   const visibleMessages = useMemo(() => {
@@ -111,6 +111,14 @@ function PureMessages({
 
     return filtered;
   }, [messages, chatId]);
+
+  // Scroll to bottom when new messages are added
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length]);
 
   // Show overview only if there are no messages or only system messages
   const showOverview = useMemo(() => {

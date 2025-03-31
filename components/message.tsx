@@ -9,13 +9,13 @@ import { DocumentToolCall, DocumentToolResult } from "./document";
 import { PencilEditIcon, SparklesIcon } from "./icons";
 import { Markdown } from "./markdown";
 import { MessageActions } from "./message-actions";
-import { Weather } from "./weather";
+// Removed import { Weather } from "./weather";
 import equal from "fast-deep-equal";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { MessageEditor } from "./message-editor";
-import { DocumentPreview } from "./document-preview";
+// import { DocumentPreview } from "./document-preview";
 import { MessageReasoning } from "./message-reasoning";
 import { debug } from "@/lib/utils/debug";
 import { PreviewAttachment } from './preview-attachment';
@@ -116,22 +116,6 @@ const PurePreviewMessage = ({
     id: originalMessageId.current,
     chatId
   }), [message, chatId]);
-
-  // Memoize the document tool invocation to prevent unnecessary recalculations
-  const documentToolInvocation = useMemo(() => {
-    const toolInvocations = messageWithStableId.toolInvocations || [];
-    return toolInvocations.find(
-      (t) => t.toolName === "createDocument" && t.state === "result"
-    ) as ToolInvocationResult | undefined;
-  }, [messageWithStableId.toolInvocations]);
-
-  // Only show document preview if we have a valid result
-  const documentPreviewResult = useMemo(() => {
-    if (!documentToolInvocation || documentToolInvocation.state !== "result") {
-      return undefined;
-    }
-    return documentToolInvocation.result;
-  }, [documentToolInvocation]);
 
   useEffect(() => {
     debug('message', 'Message rendered', {
@@ -286,14 +270,7 @@ const PurePreviewMessage = ({
 
                     return (
                       <div key={toolCallId}>
-                        {toolName === 'getWeather' ? (
-                          <Weather weatherAtLocation={result} />
-                        ) : toolName === 'createDocument' ? (
-                          <DocumentPreview
-                            isReadonly={isReadonly}
-                            result={result}
-                          />
-                        ) : toolName === 'updateDocument' ? (
+                        {toolName === 'updateDocument' ? (
                           <DocumentToolResult
                             type="update"
                             result={result}
@@ -320,15 +297,8 @@ const PurePreviewMessage = ({
                   return (
                     <div
                       key={toolCallId}
-                      className={cx({
-                        skeleton: ['getWeather'].includes(toolName),
-                      })}
                     >
-                      {toolName === 'getWeather' ? (
-                        <Weather />
-                      ) : toolName === 'createDocument' ? (
-                        <DocumentPreview isReadonly={isReadonly} args={args} />
-                      ) : toolName === 'updateDocument' ? (
+                      {toolName === 'updateDocument' ? (
                         <DocumentToolCall
                           type="update"
                           args={args}

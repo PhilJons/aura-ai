@@ -43,7 +43,7 @@ export function UploadProgress({ uploadProgress, className }: UploadProgressProp
       console.log("Setting initial simulated progress", newSimulatedProgress);
       setSimulatedProgress(newSimulatedProgress);
     }
-  }, [uploadProgress]);
+  }, [uploadProgress, simulatedProgress]);
   
   // Set up animation intervals for each file
   useEffect(() => {
@@ -132,11 +132,14 @@ export function UploadProgress({ uploadProgress, className }: UploadProgressProp
     
     // Cleanup function
     return () => {
-      Object.values(animationIntervalsRef.current).forEach(interval => {
+      // Copy the ref value to avoid using it directly in cleanup
+      const intervalsToClear = { ...animationIntervalsRef.current }; 
+      Object.values(intervalsToClear).forEach(interval => {
         clearInterval(interval);
       });
     };
-  }, [uploadProgress, simulatedComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadProgress, simulatedComplete, simulatedProgress]);
   
   // Easing function for smoother progress animation
   function easeInOutCubic(x: number): number {
@@ -207,8 +210,8 @@ function FileUploadProgressItem({
       )}
     >
       {/* Document icon area with circular progress */}
-      <div className="relative flex items-center justify-center w-6 h-6">
-        <svg className="w-6 h-6" viewBox="0 0 24 24">
+      <div className="relative flex items-center justify-center size-6">
+        <svg className="size-6" viewBox="0 0 24 24">
           <circle 
             cx="12" 
             cy="12" 
@@ -241,7 +244,7 @@ function FileUploadProgressItem({
         <div className="absolute inset-0 flex items-center justify-center">
           {isProcessing ? (
             <motion.div 
-              className="w-1.5 h-1.5 bg-blue-500 dark:bg-blue-400 rounded-full"
+              className="size-1.5 bg-blue-500 dark:bg-blue-400 rounded-full"
               animate={{ 
                 scale: [1, 1.5, 1],
                 opacity: [1, 0.7, 1]
@@ -253,7 +256,7 @@ function FileUploadProgressItem({
               }}
             />
           ) : (
-            <div className="w-1.5 h-1.5 bg-blue-500 dark:bg-blue-400 rounded-full" />
+            <div className="size-1.5 bg-blue-500 dark:bg-blue-400 rounded-full" />
           )}
         </div>
       </div>

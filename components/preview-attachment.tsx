@@ -209,7 +209,7 @@ export const PreviewAttachment = ({
                 alt={name}
                 width={32}
                 height={32}
-                className="object-cover rounded w-8 h-8"
+                className="object-cover rounded size-8"
               />
             )}
 

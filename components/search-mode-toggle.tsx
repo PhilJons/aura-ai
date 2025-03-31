@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { Globe } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Toggle } from './ui/toggle'
-import { useSearchToggle } from '@/context/search-toggle-provider'
+import { useSearchToggle } from '@/components/search-toggle'
 
 // Helper functions for cookie management
 function setCookie(name: string, value: string, days = 365) {

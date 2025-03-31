@@ -1,14 +1,13 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useWindowSize } from 'usehooks-ts';
-import { useEffect, } from 'react';
+import { useEffect, memo } from 'react';
 
 import { ModelSelector } from '@/components/model-selector';
 import { SidebarToggle } from '@/components/sidebar-toggle';
 import { Button } from '@/components/ui/button';
 import { PlusIcon } from './icons';
 import { useSidebar } from './ui/sidebar';
-import { memo } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { type VisibilityType, VisibilitySelector } from './visibility-selector';
 import { SystemPromptDialog } from '@/components/system-prompt-dialog';
@@ -79,7 +78,7 @@ function DocumentContextSSE({ chatId, isProcessingFile }: {
         eventSource.close();
       }
     };
-  }, [chatId]);
+  }, [chatId, isProcessingFile]);
 
   return null;
 }
