@@ -270,58 +270,7 @@ const PurePreviewMessage = ({
               />
             )}
 
-            {(mainContent || (messageWithStableId.role === 'assistant' && isLoading)) && mode === 'view' && (
-              <div className={cn(
-                "flex flex-row gap-2 items-start",
-                messageWithStableId.role === 'user' && messageWithStableId.experimental_attachments?.length 
-                  ? "self-end max-w-[300px]" 
-                  : ""
-              )}>
-                {messageWithStableId.role === 'user' && !isReadonly && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="px-2 h-fit rounded-full text-muted-foreground opacity-0 group-hover/message:opacity-100"
-                        onClick={() => {
-                          setMode('edit');
-                        }}
-                      >
-                        <PencilEditIcon />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Edit message</TooltipContent>
-                  </Tooltip>
-                )}
-
-                <div
-                  className={cn('flex flex-col gap-4', {
-                    'bg-primary text-primary-foreground px-3 py-2 rounded-xl [&_.prose]:text-primary-foreground [&_.prose_*]:text-primary-foreground':
-                      messageWithStableId.role === 'user',
-                  })}
-                >
-                  <StreamingMarkdown 
-                    content={mainContent} 
-                    messageId={messageWithStableId.id}
-                  />
-                </div>
-              </div>
-            )}
-
-            {messageWithStableId.content && mode === 'edit' && (
-              <div className="flex flex-row gap-2 items-start">
-                <div className="size-8" />
-
-                <MessageEditor
-                  key={`editor-${messageWithStableId.id}`}
-                  message={{ ...messageWithStableId, chatId }}
-                  setMode={setMode}
-                  setMessages={setMessages}
-                  reload={reload}
-                />
-              </div>
-            )}
-
+            {/* Search invocations (moved above main content) */}
             {searchInvocations.length > 0 && (
               <div className="flex flex-col gap-4">
                 <div className="max-w-2xl mx-auto w-full">
@@ -391,7 +340,7 @@ const PurePreviewMessage = ({
                             </div>
 
                             {/* Preview of top result from each search */}
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-3 mb-3">
                               {(() => {
                                 // Get a preview of results
                                 const previewResults = searchInvocations.reduce((acc, invocation) => {
@@ -412,37 +361,71 @@ const PurePreviewMessage = ({
                                   return acc;
                                 }, [] as ExtendedSearchResultItem[]);
                                 
-                                // Show up to 4 preview results
-                                return previewResults.slice(0, 4).map((result, index) => (
-                                  <Link 
-                                    href={result.url} 
-                                    passHref 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    key={index}
-                                    className="block"
-                                  >
-                                    <div className="border rounded-md p-2 hover:bg-muted/50 transition-colors flex flex-col">
-                                      <p className="text-xs line-clamp-1 font-medium text-blue-600 dark:text-blue-400 text-left">
-                                        {result.title || result.content.substring(0, 60)}
-                                      </p>
-                                      <div className="mt-1 flex items-center space-x-1">
-                                        <Avatar className="size-3 flex-shrink-0">
-                                          <AvatarImage
-                                            src={`https://www.google.com/s2/favicons?domain=${getHostname(result.url)}`}
-                                            alt={getHostname(result.url)}
-                                          />
-                                          <AvatarFallback className="text-[6px]">
-                                            {getHostname(result.url)[0]?.toUpperCase() || '?'}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div className="text-[10px] text-muted-foreground truncate text-left">
-                                          {displayUrlName ? displayUrlName(result.url) : getHostname(result.url)}
-                                        </div>
+                                // Count total results across all searches
+                                const totalResultsCount = searchInvocations.reduce((total, invocation) => {
+                                  if (invocation.state === 'result') {
+                                    const results = extractSearchResults((invocation as ToolInvocationResult).result);
+                                    return total + results.length;
+                                  }
+                                  return total;
+                                }, 0);
+                                
+                                return (
+                                  <>
+                                    {/* First result */}
+                                    {previewResults.length > 0 && (
+                                      <div>
+                                        <Link 
+                                          href={previewResults[0].url} 
+                                          passHref 
+                                          target="_blank" 
+                                          rel="noopener noreferrer"
+                                          className="block h-full"
+                                        >
+                                          <div className="border rounded-md p-2 h-full hover:bg-muted/50 transition-colors flex flex-col">
+                                            <p className="text-xs line-clamp-1 font-medium text-blue-600 dark:text-blue-400 text-left">
+                                              {previewResults[0].title || previewResults[0].content.substring(0, 60)}
+                                            </p>
+                                            <div className="mt-1 flex items-center space-x-1">
+                                              <Avatar className="size-3 flex-shrink-0">
+                                                <AvatarImage
+                                                  src={`https://www.google.com/s2/favicons?domain=${getHostname(previewResults[0].url)}`}
+                                                  alt={getHostname(previewResults[0].url)}
+                                                />
+                                                <AvatarFallback className="text-[6px]">
+                                                  {getHostname(previewResults[0].url)[0]?.toUpperCase() || '?'}
+                                                </AvatarFallback>
+                                              </Avatar>
+                                              <div className="text-[10px] text-muted-foreground truncate text-left">
+                                                {displayUrlName ? displayUrlName(previewResults[0].url) : getHostname(previewResults[0].url)}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </Link>
                                       </div>
-                                    </div>
-                                  </Link>
-                                ));
+                                    )}
+                                    
+                                    {/* "+X more" counter box */}
+                                    {totalResultsCount > 1 && (
+                                      <div>
+                                        <button
+                                          onClick={() => {
+                                            setCollapsibleStates(prev => ({
+                                              ...prev,
+                                              'search-group': true
+                                            }));
+                                          }}
+                                          className="h-full w-full border rounded-md p-2 flex flex-col items-center justify-center bg-muted/20 hover:bg-muted/30 transition-colors"
+                                        >
+                                          <span className="text-sm font-medium text-muted-foreground">+{totalResultsCount - 1}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            more {totalResultsCount - 1 === 1 ? 'result' : 'results'}
+                                          </span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                );
                               })()}
                             </div>
                           </>
@@ -497,6 +480,59 @@ const PurePreviewMessage = ({
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Main Text Content (moved after search invocations) */}
+            {(mainContent || (messageWithStableId.role === 'assistant' && isLoading)) && mode === 'view' && (
+              <div className={cn(
+                "flex flex-row gap-2 items-start",
+                messageWithStableId.role === 'user' && messageWithStableId.experimental_attachments?.length 
+                  ? "self-end max-w-[300px]" 
+                  : ""
+              )}>
+                {messageWithStableId.role === 'user' && !isReadonly && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="px-2 h-fit rounded-full text-muted-foreground opacity-0 group-hover/message:opacity-100"
+                        onClick={() => {
+                          setMode('edit');
+                        }}
+                      >
+                        <PencilEditIcon />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit message</TooltipContent>
+                  </Tooltip>
+                )}
+
+                <div
+                  className={cn('flex flex-col gap-4', {
+                    'bg-primary text-primary-foreground px-3 py-2 rounded-xl [&_.prose]:text-primary-foreground [&_.prose_*]:text-primary-foreground':
+                      messageWithStableId.role === 'user',
+                  })}
+                >
+                  <StreamingMarkdown 
+                    content={mainContent} 
+                    messageId={messageWithStableId.id}
+                  />
+                </div>
+              </div>
+            )}
+
+            {messageWithStableId.content && mode === 'edit' && (
+              <div className="flex flex-row gap-2 items-start">
+                <div className="size-8" />
+
+                <MessageEditor
+                  key={`editor-${messageWithStableId.id}`}
+                  message={{ ...messageWithStableId, chatId }}
+                  setMode={setMode}
+                  setMessages={setMessages}
+                  reload={reload}
+                />
               </div>
             )}
 
