@@ -1,5 +1,5 @@
 import type { ChangeEvent, FormEvent } from 'react';
-import type { ChatRequestOptions, Message } from 'ai';
+import type { ChatRequestOptions, Message, ToolInvocation } from 'ai';
 import { PreviewMessage, ThinkingMessage } from './message';
 import { useScrollToBottom } from './use-scroll-to-bottom';
 import { Overview } from './overview';
@@ -7,6 +7,7 @@ import { memo, useEffect, useMemo, useRef } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import equal from 'fast-deep-equal';
 import { debug } from '@/lib/utils/debug';
+import { GroupedSearchSection } from '@/components/search-section';
 
 interface MessagesProps {
   chatId: string;
@@ -23,6 +24,16 @@ interface MessagesProps {
   input?: string;
   handleInputChange?: (e: ChangeEvent<HTMLTextAreaElement> | ChangeEvent<HTMLInputElement>) => void;
   handleSubmit?: (e: FormEvent<HTMLFormElement>) => void;
+}
+
+// Function to check if a message is a search tool invocation
+function isSearchToolInvocation(message: Message): boolean {
+  return (
+    message.role === 'assistant' &&
+    Array.isArray(message.toolInvocations) &&
+    message.toolInvocations.length > 0 &&
+    message.toolInvocations.every(inv => inv.toolName === 'search')
+  );
 }
 
 function PureMessages({
@@ -138,6 +149,38 @@ function PureMessages({
     return shouldShow;
   }, [visibleMessages.length, messages, chatId, isReadonly]);
 
+  // --- Grouping Logic --- 
+  const groupedMessages: (Message | { type: 'grouped-search'; invocations: ToolInvocation[], id: string })[] = [];
+  let i = 0;
+  while (i < visibleMessages.length) {
+    const currentMessage = visibleMessages[i];
+
+    if (isSearchToolInvocation(currentMessage)) {
+      const searchGroup: ToolInvocation[] = [...(currentMessage.toolInvocations || [])];
+      let j = i + 1;
+      // Look ahead for more consecutive search invocations
+      while (j < visibleMessages.length && isSearchToolInvocation(visibleMessages[j])) {
+        searchGroup.push(...(visibleMessages[j].toolInvocations || []));
+        j++;
+      }
+
+      if (searchGroup.length > 0) { // Should always be > 0 if we entered the if
+          groupedMessages.push({
+            type: 'grouped-search',
+            invocations: searchGroup,
+            id: currentMessage.id // Use the first message's ID for key
+          });
+          i = j; // Move index past the grouped messages
+          continue; // Skip adding the individual message
+      }
+    }
+    
+    // If not a search message or not part of a group, add it individually
+    groupedMessages.push(currentMessage);
+    i++;
+  }
+  // --- End Grouping Logic ---
+
   return (
     <div
       ref={messagesContainerRef}
@@ -145,21 +188,43 @@ function PureMessages({
     >
       {showOverview && <Overview />}
 
-      {visibleMessages.map((message, index) => (
-        <PreviewMessage
-          key={message.id}
-          chatId={chatId}
-          message={message}
-          isLoading={isLoading && messages.length - 1 === index}
-          vote={votes?.find((vote) => vote.messageId === message.id)}
-          setMessages={setMessages}
-          reload={reload}
-          isReadonly={isReadonly}
-        />
-      ))}
+      {/* Render grouped or individual messages */}
+      {groupedMessages.map((item, index) => {
+        if ('type' in item && item.type === 'grouped-search') {
+          return (
+            <GroupedSearchSection 
+              key={item.id} 
+              invocations={item.invocations} 
+              chatId={chatId}
+            />
+          );
+        } else {
+          // Render individual message using PreviewMessage
+          const message = item as Message;
+          // Determine isLoading for individual messages correctly
+          // isLoading is true only if it's the *very last* item in the *original* messages array AND the overall chat is loading
+          const isLastOriginalMessage = index === groupedMessages.length - 1 && messages.length > 0 && message.id === messages[messages.length - 1].id;
+          const individualIsLoading = isLoading && isLastOriginalMessage;
 
+          return (
+            <PreviewMessage
+              key={message.id}
+              chatId={chatId}
+              message={message}
+              isLoading={individualIsLoading} 
+              vote={votes?.find((vote) => vote.messageId === message.id)}
+              setMessages={setMessages}
+              reload={reload}
+              isReadonly={isReadonly}
+            />
+          );
+        }
+      })}
+
+      {/* Thinking indicator logic might need adjustment if grouping affects the last message */}
       {isLoading &&
         messages.length > 0 &&
+        !isSearchToolInvocation(messages[messages.length - 1]) && // Only show if last msg isn't search
         messages[messages.length - 1].role === 'user' && <ThinkingMessage />}
 
       <div

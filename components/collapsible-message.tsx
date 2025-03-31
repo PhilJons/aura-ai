@@ -1,11 +1,10 @@
 import { cn } from '@/lib/utils'
-import { ChevronDown, UserCircle2 } from 'lucide-react'
+import { ChevronDown, UserCircle2, Globe } from 'lucide-react'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger
 } from '@/components/ui/collapsible'
-import { BotIcon } from '@/components/icons'
 import { Separator } from '@/components/ui/separator'
 
 interface CollapsibleMessageProps {
@@ -39,7 +38,7 @@ export function CollapsibleMessage({
             (role === 'user' ? (
               <UserCircle2 size={20} className="text-muted-foreground" />
             ) : (
-              <BotIcon />
+              <Globe size={20} className="text-muted-foreground" />
             ))}
         </div>
       </div>
