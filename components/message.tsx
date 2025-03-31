@@ -328,7 +328,7 @@ const PurePreviewMessage = ({
                                 
                                 return allQueries.map((query, index) => (
                                   <span 
-                                    key={index}
+                                    key={`search-query-${query || 'empty'}-${index}`}
                                     className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-muted"
                                   >
                                     {query}

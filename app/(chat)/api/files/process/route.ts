@@ -106,12 +106,24 @@ export async function POST(request: Request) {
             blobName
           });
           
+          if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
+            console.error("Missing AZURE_STORAGE_CONNECTION_STRING");
+            return Response.json({ error: "Storage connection not configured" }, { status: 500 });
+          }
+          
           const blobServiceClient = BlobServiceClient.fromConnectionString(
-            process.env.AZURE_STORAGE_CONNECTION_STRING!
+            process.env.AZURE_STORAGE_CONNECTION_STRING
           );
+          
+          if (!process.env.AZURE_STORAGE_CONTAINER_NAME) {
+            console.error("Missing AZURE_STORAGE_CONTAINER_NAME");
+            return Response.json({ error: "Storage container not configured" }, { status: 500 });
+          }
+          
           const containerClient = blobServiceClient.getContainerClient(
-            process.env.AZURE_STORAGE_CONTAINER_NAME!
+            process.env.AZURE_STORAGE_CONTAINER_NAME
           );
+          
           const blockBlobClient = containerClient.getBlockBlobClient(blobName);
           
           logger.document.debug('Starting blob download', {

@@ -11,12 +11,22 @@ function generateSasUrl(blobName: string): string {
     timestamp: new Date().toISOString()
   });
   
+  const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+  if (!connectionString) {
+    throw new Error('Storage connection string is not configured');
+  }
+  
   const blobServiceClient = BlobServiceClient.fromConnectionString(
-    process.env.AZURE_STORAGE_CONNECTION_STRING!
+    connectionString
   );
   
+  const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
+  if (!containerName) {
+    throw new Error('Storage container name is not configured');
+  }
+  
   const containerClient = blobServiceClient.getContainerClient(
-    process.env.AZURE_STORAGE_CONTAINER_NAME!
+    containerName
   );
   
   const blobClient = containerClient.getBlobClient(blobName);
@@ -27,7 +37,6 @@ function generateSasUrl(blobName: string): string {
   expiresOn.setDate(startsOn.getDate() + 1);
 
   // Extract account name and key from connection string
-  const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING!;
   const accountName = connectionString.match(/AccountName=([^;]+)/)?.[1] || '';
   const accountKey = connectionString.match(/AccountKey=([^;]+)/)?.[1] || '';
   
@@ -118,6 +127,28 @@ export async function POST(request: Request) {
       environment: process.env.VERCEL_ENV || 'local',
       timestamp: new Date().toISOString()
     });
+
+    if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
+      return Response.json({ error: 'Storage connection string is not configured' }, { status: 500 });
+    }
+
+    const blobServiceClient = BlobServiceClient.fromConnectionString(
+      process.env.AZURE_STORAGE_CONNECTION_STRING
+    );
+    
+    if (!process.env.AZURE_STORAGE_CONTAINER_NAME) {
+      return Response.json({ error: 'Storage container name is not configured' }, { status: 500 });
+    }
+
+    const containerClient = blobServiceClient.getContainerClient(
+      process.env.AZURE_STORAGE_CONTAINER_NAME
+    );
+
+    // Extract account name and key from connection string
+    const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+    if (!connectionString) {
+      return Response.json({ error: 'Storage connection string is not configured' }, { status: 500 });
+    }
 
     // Generate a SAS URL for the blob
     const sasUrl = generateSasUrl(blobName);

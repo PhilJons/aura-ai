@@ -41,8 +41,8 @@ export function SearchSkeleton({ queries, sources }: SearchSkeletonProps) {
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <Skeleton className="h-4 w-20" /> {/* "Searching for:" label */}
             <div className="flex flex-wrap gap-2">
-              {queries.map((_, i) => (
-                <Skeleton key={`q-${i}`} className="h-5 w-20 rounded-full" />
+              {queries.map((query, i) => (
+                <Skeleton key={`query-${query || 'empty'}-${i}`} className="h-5 w-20 rounded-full" />
               ))}
             </div>
           </div>
@@ -53,8 +53,8 @@ export function SearchSkeleton({ queries, sources }: SearchSkeletonProps) {
           <div className="flex flex-wrap items-center gap-2">
             <Skeleton className="h-4 w-20" /> {/* "Sources:" label */}
             <div className="flex flex-wrap gap-2">
-              {sources.map((_, i) => (
-                <Skeleton key={`s-${i}`} className="h-4 w-16 rounded-full" />
+              {sources.map((source, i) => (
+                <Skeleton key={`source-${source || 'empty'}-${i}`} className="h-4 w-16 rounded-full" />
               ))}
             </div>
           </div>
@@ -64,8 +64,8 @@ export function SearchSkeleton({ queries, sources }: SearchSkeletonProps) {
       {/* Results skeletons */}
       {hasContent && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {[1, 2, 3, 4].map((_, i) => (
-            <div key={i} className="overflow-hidden">
+          {[1, 2, 3, 4].map((num) => (
+            <div key={`skeleton-${num}`} className="overflow-hidden">
               <Skeleton className="w-full h-24 rounded-md" />
             </div>
           ))}
@@ -126,6 +126,7 @@ export function SearchSection({
   return (
     <div className="max-w-2xl mx-auto w-full">
       <CollapsibleMessage
+        role="assistant"
         isCollapsible={true}
         header={header}
         isOpen={isOpen}
@@ -275,7 +276,7 @@ export function GroupedSearchSection({ invocations, chatId }: GroupedSearchSecti
       <div className="flex flex-wrap gap-x-2 gap-y-1 p-1 items-center">
         <span className="font-medium mr-1 shrink-0">Search Results:</span>
         {allQueries.map((q, i) => (
-          <span key={i} className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-muted whitespace-nowrap">
+          <span key={`query-${q || 'empty'}-${i}`} className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-muted whitespace-nowrap">
             <span className="truncate max-w-[200px] sm:max-w-xs">{q || 'Query'}</span>
           </span>
         ))}
@@ -292,6 +293,7 @@ export function GroupedSearchSection({ invocations, chatId }: GroupedSearchSecti
     return (
       <div className="max-w-2xl mx-auto w-full">
         <CollapsibleMessage
+          role="assistant"
           isCollapsible={true}
           header={headerContent}
           isOpen={isOpen}

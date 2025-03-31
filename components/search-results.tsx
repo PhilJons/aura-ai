@@ -267,7 +267,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
                   passHref 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  key={index}
+                  key={`source-result-${result.url}-${index}`}
                   className="block h-full"
                 >
                   <div className="border rounded-md p-2 h-full hover:bg-muted/50 transition-colors flex flex-col">
@@ -313,7 +313,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
             passHref 
             target="_blank" 
             rel="noopener noreferrer"
-            key={index}
+            key={`search-result-${result.url}-${index}`}
             className="block h-full"
           >
             <div className="border rounded-md p-2 size-full hover:bg-muted/50 transition-colors flex flex-col">

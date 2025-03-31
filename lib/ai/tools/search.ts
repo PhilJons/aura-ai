@@ -147,7 +147,7 @@ export const searchTool = tool({
       const responseText = await response.text();
       
       // Try to parse the response as JSON
-      let data;
+      let data: { results?: SearchResultItem[] } = { results: [] };
       try {
         data = JSON.parse(responseText);
         console.log(`[Tavily Search] Got ${data.results?.length || 0} results`);
