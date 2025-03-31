@@ -8,6 +8,9 @@ export const systemPrompt = ({
     selectedChatModel: string;
     isSearchEnabled?: boolean;
   }) => {
+    const currentDate = new Date();
+    const formattedDate = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+    
     const searchSection = isSearchEnabled ? `
 When using web search capabilities:
 1. Use the search tool for retrieving current information beyond your training data
@@ -17,13 +20,53 @@ When using web search capabilities:
    - Factual information that may have changed
    - Specific details you're uncertain about
 3. When searching:
+   - Always perform at least 2-3 different search queries for each user request
+   - Ensure each search query uses different keywords and approaches to widen results
+   - For complex questions, try substantially different phrasings and keyword combinations
+   - Example: For "effects of climate change on agriculture":
+     * Search 1: "climate change agriculture impacts ${currentDate.getFullYear()}"
+     * Search 2: "farming challenges global warming current research"
+     * Search 3: "crop yields temperature increase data"
+   - Deliberately diversify search keywords to explore different aspects of the topic
    - Use specific, targeted queries focused on the information needed
    - Break complex questions into simpler search queries
    - Use keywords rather than full sentences for more effective searches
+   - Today's date is ${formattedDate} and the current year is ${currentDate.getFullYear()}
+   - Include the current year (${currentDate.getFullYear()}) in search queries when:
+     * Searching for recent events, news, or developments
+     * Looking for current statistics, reports, or data
+     * Researching trends that change annually
+     * Seeking information about annual events or conferences
+     * Checking for current versions of products, software, or standards
+   - Include the current month and year when:
+     * Searching for very recent events (within the last few months)
+     * Looking for monthly reports or statistics
+     * Researching seasonal trends or events
+   - Do NOT include the year when:
+     * Searching for historical information not tied to a specific time period
+     * Looking for general concepts, definitions, or principles
+     * Researching evergreen topics that don't change frequently
+   - DO NOT use the "site:" operator in search queries except under very specific circumstances:
+     * NEVER guess or assume domain names - this leads to incorrect search results
+     * Even if asked to search a company's website, FIRST do a general search to discover the official website
+     * Only use "site:" with domains you have 100% verified through search results or explicit user specification
+     * For queries like "Search Company X's website for Y", use the general search "Company X Y" without site restriction
+     * INCORRECT EXAMPLE: "site:aura.se vision statement" (Do not assume domains)
+     * CORRECT EXAMPLE: "Aura Group vision statement Stockholm Sweden" (Use general search terms)
+   - When searching for company information:
+     * Always start with a general search to identify the official website
+     * Look for the company name along with relevant keywords
+     * Never assume TLDs (.com, .se, .org) - these should be discovered through search
+     * Use the company location (city/country) as an additional keyword rather than guessing domains
 4. After receiving search results:
    - Analyze the information critically
+   - Synthesize information from ALL search queries, not just one
+   - Cross-reference information between different search results to verify accuracy
+   - When information from different searches conflicts, note the discrepancies and prioritize recent, authoritative sources
+   - Use information from all diverse searches to build a more comprehensive response
    - Cite sources using the [number](url) format
    - Prioritize authoritative and recent sources
+   - Check the publication dates of search results and prefer the most current information
    - If results are inadequate, try refining the search query
 5. Balance natural search acknowledgment with structured responses:
    - Indicate when you've used web search for new information

@@ -1,11 +1,60 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, Children, isValidElement } from 'react';
+import { memo, Children, isValidElement, createElement, Fragment } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './code-block';
 import { cn } from '@/lib/utils';
+
+// Helper function to process children and style citations
+const processChildrenForCitations = (children: React.ReactNode): React.ReactNode => {
+  return Children.map(children, (child) => {
+    if (typeof child === 'string') {
+      // Match standalone citation numbers or numbers at the end of text with optional period
+      // This regex looks for numbers that are either standalone or at the end of text
+      // Examples: "text 1", "text 2.", "3", "4."
+      const citationRegex = /(\d+)\.?$/;
+      const match = child.match(citationRegex);
+      
+      if (match) {
+        // Find the position where the citation number starts
+        const citationNumber = match[1];
+        const positionOfCitation = child.lastIndexOf(citationNumber);
+        
+        // Split the text into content before citation and the citation itself
+        const textBeforeCitation = child.substring(0, positionOfCitation);
+        
+        // Only process if it looks like a reference (standalone number or at end of text)
+        // Avoid processing numbers that are part of sentences like "in 2023"
+        if (textBeforeCitation.trim() === '' || textBeforeCitation.endsWith(' ')) {
+          return (
+            <Fragment>
+              {textBeforeCitation}
+              <span className="inline-flex items-center justify-center h-5 w-5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full text-xs font-medium mx-0.5">
+                {citationNumber}
+              </span>
+            </Fragment>
+          );
+        }
+      }
+      return child; // Return original string if no citation found
+    }
+
+    // If the child is a React element, process its children recursively
+    if (isValidElement(child) && child.props.children) {
+      // Clone the element to avoid modifying the original props
+      // Pass the processed children to the cloned element
+      return createElement(child.type, {
+        ...child.props,
+        children: processChildrenForCitations(child.props.children),
+      });
+    }
+
+    // Return other types of children (like numbers, null, etc.) as is
+    return child;
+  });
+};
 
 const components: Partial<Components> = {
   // @ts-expect-error
@@ -24,9 +73,9 @@ const components: Partial<Components> = {
       </CodeBlock>
     );
   },
-  // Handle paragraphs to prevent invalid nesting
+  // Handle paragraphs, apply citation styling
   p: ({ children }) => {
-    // Check if children contains only a code block
+    // Preserve existing logic for code blocks within paragraphs
     const childrenArray = Children.toArray(children);
     if (childrenArray.length === 1 && isValidElement(childrenArray[0])) {
       const child = childrenArray[0];
@@ -34,11 +83,16 @@ const components: Partial<Components> = {
         return <>{children}</>;
       }
     }
-    return <p className="mb-4">{children}</p>;
+    // Apply citation styling to paragraph children
+    return <p className="mb-4">{processChildrenForCitations(children)}</p>;
+  },
+  // Handle list items, apply citation styling
+  li: ({ children, ...props }) => {
+    // Apply citation styling to list item children
+    return <li {...props}>{processChildrenForCitations(children)}</li>;
   },
   // Handle pre tags
   pre: ({ children }) => {
-    // Check if children is a CodeBlock
     const childrenArray = Children.toArray(children);
     if (childrenArray.length === 1 && isValidElement(childrenArray[0])) {
       const child = childrenArray[0];
@@ -79,7 +133,7 @@ const components: Partial<Components> = {
         className="text-blue-500 hover:underline"
         {...props}
       >
-        {children}
+        {processChildrenForCitations(children)}
       </a>
     );
   },
