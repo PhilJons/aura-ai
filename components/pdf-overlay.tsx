@@ -79,7 +79,7 @@ export function PdfOverlay({
           
           logger.document.debug('Received fresh SAS URL for PDF overlay', {
             blobName,
-            sasUrl: data.sasUrl.substring(0, 50) + '...'
+            sasUrl: `${data.sasUrl.substring(0, 50)}...`
           });
           
           setSasUrl(data.sasUrl);

@@ -76,14 +76,14 @@ export async function POST(request: Request) {
     
     logger.upload.debug('SAS token generated successfully', {
       blobName,
-      sasUrl: sasData.sasUrl.substring(0, 50) + '...',
-      blobUrl: sasData.blobUrl.substring(0, 50) + '...',
+      sasUrl: `${sasData.sasUrl.substring(0, 50)}...`,
+      blobUrl: `${sasData.blobUrl.substring(0, 50)}...`,
       containerName: sasData.containerName
     });
 
     logger.upload.info('SAS token generated successfully', {
       blobName,
-      sasUrl: sasData.sasUrl.substring(0, 50) + '...', // Log only part of the URL for security
+      sasUrl: `${sasData.sasUrl.substring(0, 50)}...`, // Log only part of the URL for security
       timestamp: new Date().toISOString()
     });
 

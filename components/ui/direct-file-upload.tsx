@@ -182,7 +182,7 @@ export function useDirectFileUpload({
         const uploadStartTime = Date.now()
         
         // Create a progress tracker
-        let lastProgressUpdate = Date.now()
+        const lastProgressUpdate = Date.now()
         const progressUpdateInterval = 500 // ms
         
         try {

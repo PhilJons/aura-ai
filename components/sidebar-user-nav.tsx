@@ -104,7 +104,7 @@ export function SidebarUserNav({ user }: { user: User }) {
     
     // Cleanup function to revoke object URLs to avoid memory leaks
     return () => {
-      if (profileImage && profileImage.startsWith('blob:')) {
+      if (profileImage?.startsWith('blob:')) {
         URL.revokeObjectURL(profileImage);
       }
     };

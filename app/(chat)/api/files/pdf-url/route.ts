@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     
     logger.document.debug('SAS URL generated successfully', {
       blobName,
-      sasUrl: sasUrl.substring(0, 50) + '...'
+      sasUrl: `${sasUrl.substring(0, 50)}...`
     });
 
     return new Response(JSON.stringify({

@@ -1,14 +1,13 @@
 "use client";
 
-import type { ChatRequestOptions, Message, ToolInvocation } from "ai";
+import type { ChatRequestOptions, Message, } from "ai";
 import cx from "classnames";
 import { AnimatePresence, motion } from "framer-motion";
 import { memo, useState, useEffect, useMemo, useRef } from "react";
 import type { Vote } from "@/lib/db/schema";
 import { DocumentToolCall, DocumentToolResult } from "./document";
 import { PencilEditIcon, SparklesIcon } from "./icons";
-import { Search } from "lucide-react";
-import { Markdown } from "./markdown";
+import { Globe, ChevronDown, } from "lucide-react";
 import { MessageActions } from "./message-actions";
 // Removed import { Weather } from "./weather";
 import equal from "fast-deep-equal";
@@ -21,12 +20,10 @@ import { MessageReasoning } from "./message-reasoning";
 import { debug } from "@/lib/utils/debug";
 import { PreviewAttachment } from './preview-attachment';
 import { SearchResults } from './search-results';
-import { SearchResultItem } from '@/lib/ai/tools/search';
-import { CollapsibleMessage } from './collapsible-message';
+import type { SearchResultItem } from '@/lib/ai/tools/search';
 import { StreamingMarkdown } from "./streaming-markdown";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import Link from "next/link";
-import { Globe, ChevronDown } from "lucide-react";
 
 interface DocumentToolInvocation {
   toolName: string;
@@ -110,7 +107,7 @@ function extractSearchQuery(data: any, args?: any): string {
     if (typeof data === 'string') {
       const parsed = JSON.parse(data);
       if (parsed && typeof parsed.query === 'string') return parsed.query;
-      if (parsed && parsed.args && typeof parsed.args.query === 'string') return parsed.args.query;
+      if (parsed?.args && typeof parsed.args.query === 'string') return parsed.args.query;
     }
   } catch (e) {
      console.error("Failed to parse search query", e);
@@ -126,7 +123,7 @@ function getHostname(url: string): string {
     // If URL doesn't start with http:// or https://, add https://
     let urlToProcess = url;
     if (!/^https?:\/\//i.test(urlToProcess)) {
-      urlToProcess = 'https://' + urlToProcess;
+      urlToProcess = `https://${urlToProcess}`;
     }
     
     return new URL(urlToProcess).hostname;
@@ -144,7 +141,7 @@ function displayUrlName(url: string): string {
     // If URL doesn't start with http:// or https://, add https://
     let urlToProcess = url;
     if (!/^https?:\/\//i.test(urlToProcess)) {
-      urlToProcess = 'https://' + urlToProcess;
+      urlToProcess = `https://${urlToProcess}`;
     }
     
     const hostname = new URL(urlToProcess).hostname;
@@ -286,6 +283,7 @@ const PurePreviewMessage = ({
                       <div className="w-full">
                         {/* Header with trigger */}
                         <button 
+                          type="button"
                           onClick={() => {
                             setCollapsibleStates(prev => ({
                               ...prev,
@@ -409,13 +407,14 @@ const PurePreviewMessage = ({
                                     {totalResultsCount > 1 && (
                                       <div>
                                         <button
+                                          type="button"
                                           onClick={() => {
                                             setCollapsibleStates(prev => ({
                                               ...prev,
                                               'search-group': true
                                             }));
                                           }}
-                                          className="h-full w-full border rounded-md p-2 flex flex-col items-center justify-center bg-muted/20 hover:bg-muted/30 transition-colors"
+                                          className="size-full border rounded-md p-2 flex flex-col items-center justify-center bg-muted/20 hover:bg-muted/30 transition-colors"
                                         >
                                           <span className="text-sm font-medium text-muted-foreground">+{totalResultsCount - 1}</span>
                                           <span className="text-xs text-muted-foreground">

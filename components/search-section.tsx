@@ -1,16 +1,13 @@
 'use client'
 
-import type { SearchResults as TypeSearchResults } from '@/lib/ai/tools/search'
-import { SearchResultItem } from '@/lib/ai/tools/search'
-import { ToolInvocation } from 'ai'
+import type { SearchResults as TypeSearchResults, SearchResultItem } from '@/lib/ai/tools/search'
+import type { ToolInvocation } from 'ai'
 import { useChat } from 'ai/react'
 import { CollapsibleMessage } from '@/components/collapsible-message'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SearchResults } from './search-results'
 import { Section, ToolArgsSection } from '@/components/section'
 import { useMemo, useState, useEffect } from 'react'
-import { Search } from 'lucide-react'
-import { debug } from '@/lib/utils/debug'
 
 // Define the interface for results-bearing tool invocations
 interface ToolInvocationResult {
@@ -129,7 +126,6 @@ export function SearchSection({
   return (
     <div className="max-w-2xl mx-auto w-full">
       <CollapsibleMessage
-        role="assistant"
         isCollapsible={true}
         header={header}
         isOpen={isOpen}
@@ -185,7 +181,7 @@ export function GroupedSearchSection({ invocations, chatId }: GroupedSearchSecti
   const allQueries = useMemo(() => {
     try {
       return [...new Set(invocations
-        .filter(inv => inv && inv.args)
+        .filter(inv => inv?.args)
         .map(inv => inv.args?.query as string)
         .filter(Boolean)
       )];
@@ -296,7 +292,6 @@ export function GroupedSearchSection({ invocations, chatId }: GroupedSearchSecti
     return (
       <div className="max-w-2xl mx-auto w-full">
         <CollapsibleMessage
-          role="assistant"
           isCollapsible={true}
           header={headerContent}
           isOpen={isOpen}

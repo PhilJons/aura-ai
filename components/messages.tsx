@@ -1,9 +1,9 @@
 import type { ChangeEvent, FormEvent } from 'react';
-import type { ChatRequestOptions, Message, ToolInvocation } from 'ai';
+import type { ChatRequestOptions, Message, } from 'ai';
 import { PreviewMessage, ThinkingMessage } from './message';
 import { useScrollToBottom } from './use-scroll-to-bottom';
 import { Overview } from './overview';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import equal from 'fast-deep-equal';
 import { debug } from '@/lib/utils/debug';

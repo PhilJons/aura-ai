@@ -188,7 +188,7 @@ export async function uploadBlob(
     
     logger.blob.info('Blob upload completed successfully', {
       filename,
-      url: url.substring(0, 50) + '...',
+      url: `${url.substring(0, 50)}...`,
       uploadDuration: `${uploadDuration}ms`,
       totalDuration: `${totalDuration}ms`,
       timestamp: new Date().toISOString()

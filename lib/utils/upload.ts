@@ -11,7 +11,7 @@ export async function uploadFile(file: File) {
     filename: originalFilename,
     mimeType: rawMimeType,
     fileSize: file.size,
-    fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB',
+    fileSizeInMB: `${(file.size / (1024 * 1024)).toFixed(2)}MB`,
     environment: process.env.VERCEL_ENV || 'local'
   });
 
@@ -22,7 +22,7 @@ export async function uploadFile(file: File) {
     logger.upload.debug('File converted to buffer successfully', {
       filename: originalFilename,
       bufferSize: buf.length,
-      bufferSizeInMB: (buf.length / (1024 * 1024)).toFixed(2) + 'MB'
+      bufferSizeInMB: `${(buf.length / (1024 * 1024)).toFixed(2)}MB`
     });
 
     // 1) Upload the RAW file - include original filename in the path
@@ -32,7 +32,7 @@ export async function uploadFile(file: File) {
     logger.upload.debug('Uploading raw file to blob storage', {
       uniqueFilename,
       size: buf.length,
-      sizeInMB: (buf.length / (1024 * 1024)).toFixed(2) + 'MB'
+      sizeInMB: `${(buf.length / (1024 * 1024)).toFixed(2)}MB`
     });
     
     const rawUploadData = await uploadBlob(uniqueFilename, buf, rawMimeType);
@@ -95,7 +95,7 @@ export async function uploadFile(file: File) {
           logger.upload.info('Starting PDF processing with Azure Document Intelligence', {
             filename: originalFilename,
             fileSize: buf.length,
-            fileSizeInMB: (buf.length / (1024 * 1024)).toFixed(2) + 'MB',
+            fileSizeInMB: `${(buf.length / (1024 * 1024)).toFixed(2)}MB`,
             environment: process.env.VERCEL_ENV || 'local'
           });
           
@@ -114,7 +114,7 @@ export async function uploadFile(file: File) {
               filename: originalFilename,
               pages: processed.pages,
               textLength: processed.text.length,
-              textPreview: processed.text.substring(0, 100) + '...',
+              textPreview: `${processed.text.substring(0, 100)}...`,
               timestamp: new Date().toISOString()
             });
           } catch (error) {
@@ -153,7 +153,7 @@ export async function uploadFile(file: File) {
         logger.upload.debug('Uploading processed document JSON to blob storage', {
           jsonFilename,
           jsonSize: docString.length,
-          jsonSizeInMB: (docString.length / (1024 * 1024)).toFixed(2) + 'MB'
+          jsonSizeInMB: `${(docString.length / (1024 * 1024)).toFixed(2)}MB`
         });
 
         const jsonUploadData = await uploadBlob(

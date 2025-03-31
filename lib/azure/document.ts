@@ -57,7 +57,7 @@ export async function processDocument(
     mimeType, 
     filename,
     bufferSize: buffer.byteLength,
-    bufferSizeInMB: (buffer.byteLength / (1024 * 1024)).toFixed(2) + 'MB',
+    bufferSizeInMB: `${(buffer.byteLength / (1024 * 1024)).toFixed(2)}MB`,
     timestamp: new Date().toISOString(),
     environment: process.env.VERCEL_ENV || 'local'
   });
@@ -68,13 +68,13 @@ export async function processDocument(
 
     logger.document.debug("Buffer prepared for analysis", {
       bufferSize: documentBuffer.length,
-      bufferSizeInMB: (documentBuffer.length / (1024 * 1024)).toFixed(2) + 'MB',
+      bufferSizeInMB: `${(documentBuffer.length / (1024 * 1024)).toFixed(2)}MB`,
       isArrayBuffer: buffer instanceof ArrayBuffer,
       timestamp: new Date().toISOString()
     });
 
     logger.document.debug("Initializing Document Intelligence client", {
-      endpoint: process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT?.substring(0, 20) + '...',
+      endpoint: `${process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT?.substring(0, 20)}...`,
       timestamp: new Date().toISOString()
     });
 
@@ -103,7 +103,7 @@ export async function processDocument(
     const result = await withTimeout(
       poller.pollUntilDone(),
       MAX_PROCESSING_TIME,
-      "Document analysis timed out after " + (MAX_PROCESSING_TIME / 1000) + " seconds"
+      `Document analysis timed out after ${MAX_PROCESSING_TIME / 1000} seconds`
     );
 
     if (!result) {

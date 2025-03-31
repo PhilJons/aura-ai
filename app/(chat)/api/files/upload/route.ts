@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     logger.upload.info('File upload request received', {
       filename: file.name,
       fileSize: file.size,
-      fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB',
+      fileSizeInMB: `${(file.size / (1024 * 1024)).toFixed(2)}MB`,
       mimeType: file.type,
       chatId,
       environment: process.env.VERCEL_ENV || 'local'
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
           mimeType: file.type,
           filename: file.name,
           fileSize: file.size,
-          fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB',
+          fileSizeInMB: `${(file.size / (1024 * 1024)).toFixed(2)}MB`,
           environment: process.env.VERCEL_ENV || 'local'
         });
       }
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
         errorStack: error instanceof Error ? error.stack : 'No stack trace',
         filename: file.name,
         fileSize: file.size,
-        fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB',
+        fileSizeInMB: `${(file.size / (1024 * 1024)).toFixed(2)}MB`,
         chatId,
         environment: process.env.VERCEL_ENV || 'local'
       });
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
           logger.upload.info('Attempting fallback to raw PDF upload', {
             filename: file.name,
             fileSize: file.size,
-            fileSizeInMB: (file.size / (1024 * 1024)).toFixed(2) + 'MB'
+            fileSizeInMB: `${(file.size / (1024 * 1024)).toFixed(2)}MB`
           });
           
           const arrayBuf = await file.arrayBuffer();
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
           logger.upload.debug('Uploading raw PDF to blob storage', {
             uniqueFilename,
             bufferSize: buf.length,
-            bufferSizeInMB: (buf.length / (1024 * 1024)).toFixed(2) + 'MB'
+            bufferSizeInMB: `${(buf.length / (1024 * 1024)).toFixed(2)}MB`
           });
           
           const rawUploadData = await uploadBlob(uniqueFilename, buf, file.type);

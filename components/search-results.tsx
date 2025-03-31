@@ -4,10 +4,8 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { SearchIcon, AlertCircleIcon, Loader2 } from 'lucide-react';
 import { debug } from '@/lib/utils/debug';
-import { cn } from '@/lib/utils';
 
 // Extend the imported SearchResultItem to add our new property
 import type { SearchResultItem as BaseSearchResultItem } from '@/lib/ai/tools/search';
@@ -48,7 +46,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
         }
         
         if (!/^https?:\/\//i.test(urlToTest)) {
-          urlToTest = 'https://' + urlToTest;
+          urlToTest = `https://${urlToTest}`;
         }
         
         // Test if it's valid by creating a URL object
@@ -87,7 +85,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
   // Keep the showAllResults state during re-renders with a key based on query
   const [showAllResults, setShowAllResults] = useState(() => {
     // If we have 3 or fewer results, we show all by default
-    return validatedResults && validatedResults.length <= 3 ? true : false;
+    return !!(validatedResults && validatedResults.length <= 3 );
   });
 
   // Even if there are no results, we should show a message
@@ -166,7 +164,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
       if (!sourceMap.has(source)) {
         sourceMap.set(source, []);
       }
-      sourceMap.get(source)!.push(result);
+      sourceMap.get(source)?.push(result);
     });
     
     return sourceMap;
@@ -180,7 +178,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
       // If URL doesn't start with http:// or https://, add https://
       let urlToProcess = url;
       if (!/^https?:\/\//i.test(urlToProcess)) {
-        urlToProcess = 'https://' + urlToProcess;
+        urlToProcess = `https://${urlToProcess}`;
       }
       
       return new URL(urlToProcess).hostname;
@@ -198,7 +196,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
       // If URL doesn't start with http:// or https://, add https://
       let urlToProcess = url;
       if (!/^https?:\/\//i.test(urlToProcess)) {
-        urlToProcess = 'https://' + urlToProcess;
+        urlToProcess = `https://${urlToProcess}`;
       }
       
       const hostname = new URL(urlToProcess).hostname;
@@ -345,7 +343,7 @@ export function SearchResults({ results, query = '', isLoading = false, isConsol
             <Button
               variant="ghost"
               size="sm"
-              className="text-muted-foreground text-xs w-full h-full"
+              className="text-muted-foreground text-xs size-full"
               onClick={handleViewMore}
             >
               Show {additionalResultsCount} more

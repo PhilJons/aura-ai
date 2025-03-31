@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       ];
       
       logger.upload.debug('Initial attachment created', {
-        url: attachments[0].url.substring(0, 50) + '...',
+        url: `${attachments[0].url.substring(0, 50)}...`,
         name: attachments[0].name,
         contentType: attachments[0].contentType
       });
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
           
           logger.document.debug('Starting blob download', {
             blobName,
-            blobUrl: blockBlobClient.url.substring(0, 50) + '...'
+            blobUrl: `${blockBlobClient.url.substring(0, 50)}...`
           });
           
           // Download the blob
@@ -194,7 +194,7 @@ export async function POST(request: Request) {
           
           logger.document.debug('JSON upload complete', {
             jsonFilename,
-            jsonUrl: jsonUploadData.url.substring(0, 50) + '...',
+            jsonUrl: `${jsonUploadData.url.substring(0, 50)}...`,
             pdfUrl: pdfUrl
           });
           

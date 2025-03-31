@@ -17,7 +17,6 @@ import {
   useCallback,
   type Dispatch,
   type SetStateAction,
-  type ChangeEvent,
   memo,
 } from "react";
 import { toast } from "sonner";
@@ -28,7 +27,6 @@ import { useSession } from 'next-auth/react';
 
 import { sanitizeUIMessages, cn } from "@/lib/utils";
 import equal from "fast-deep-equal";
-import { logger } from "@/lib/utils/logger";
 import { useDirectFileUpload } from "@/components/ui/direct-file-upload";
 import { UploadProgress } from "@/components/upload-progress";
 import { trackFileUploaded } from '@/lib/analytics';
@@ -773,6 +771,7 @@ function PureSendButton({
 }) {
   return (
     <button
+      type="button"
       onClick={submitForm}
       disabled={!input.trim() && uploadQueue.length === 0}
       className={cx(

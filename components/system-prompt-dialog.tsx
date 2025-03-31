@@ -131,7 +131,7 @@ function CollapsibleFileContent({ file, isLoading, onRemove }: CollapsibleFileCo
       
       logger.document.debug('Received fresh SAS URL for PDF in document context', {
         blobName,
-        sasUrl: data.sasUrl.substring(0, 50) + '...'
+        sasUrl: `${data.sasUrl.substring(0, 50)}...`
       });
       
       // Open the PDF with the fresh SAS URL

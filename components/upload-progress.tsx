@@ -252,7 +252,7 @@ function FileUploadProgressItem({
               }}
               transition={{ 
                 duration: 1.5, 
-                repeat: Infinity,
+                repeat: Number.POSITIVE_INFINITY,
                 ease: "easeInOut" 
               }}
             />
@@ -264,14 +264,14 @@ function FileUploadProgressItem({
       
       {/* Text content */}
       <div className="flex flex-col items-start gap-1">
-        <div className="text-sm font-medium">{filename.length > 25 ? filename.substring(0, 23) + '...' : filename}</div>
+        <div className="text-sm font-medium">{filename.length > 25 ? `${filename.substring(0, 23)}...` : filename}</div>
         <div className="text-xs text-muted-foreground flex items-center gap-1">
           {isProcessing ? (
             <>
               <span>Processing</span>
               <motion.span
                 animate={{ opacity: [0, 1, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
               >
                 ...
               </motion.span>

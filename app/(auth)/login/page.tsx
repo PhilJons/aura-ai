@@ -96,7 +96,7 @@ export default function WelcomePage() {
             priority
             className="mb-2"
           />
-          <div className="size-8 animate-spin rounded-full border-y-2 border-primary"></div>
+          <div className="size-8 animate-spin rounded-full border-y-2 border-primary" />
           <p className="text-lg text-muted-foreground">Signing you in...</p>
         </motion.div>
       </div>
@@ -142,7 +142,7 @@ export default function WelcomePage() {
             className="w-full flex items-center justify-center gap-2 py-6 rounded-xl font-normal"
           >
             {isLoading ? (
-              <div className="size-5 animate-spin rounded-full border-y-2 border-background"></div>
+              <div className="size-5 animate-spin rounded-full border-y-2 border-background" />
             ) : (
               <MicrosoftIcon />
             )}
