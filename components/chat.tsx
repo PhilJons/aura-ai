@@ -36,6 +36,7 @@ export function Chat({
   const { mutate } = useSWRConfig();
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [isExistingChat, setIsExistingChat] = useState(false);
+  const [currentModel, setCurrentModel] = useState(selectedChatModel);
   const router = useRouter();
   const { data: session } = useSession();
   const userEmail = session?.user?.email;
@@ -64,6 +65,13 @@ export function Chat({
       shouldRetryOnError: false
     }
   );
+
+  // Update currentModel when chat data changes
+  useEffect(() => {
+    if (chat?.model) {
+      setCurrentModel(chat.model);
+    }
+  }, [chat]);
 
   // Fetch messages if not provided
   const { data: fetchedMessages } = useSWR(
@@ -137,7 +145,7 @@ export function Chat({
     reload,
   } = useChat({
     id,
-    body: { id, selectedChatModel: chat?.model || selectedChatModel },
+    body: { id, selectedChatModel: currentModel },
     initialMessages: messagesToUse,
     experimental_throttle: 100,
     sendExtraMessageFields: true,
@@ -318,15 +326,32 @@ export function Chat({
     }
   }, [messages]); // Log whenever the messages array changes
 
+  // Add a cookie listener to detect model changes
+  useEffect(() => {
+    // Function to handle cookie changes
+    const handleCookieChange = () => {
+      // Force a revalidation of the chat data
+      mutate(`/api/chat?id=${id}`);
+    };
+
+    // Set up event listener for cookie changes
+    window.addEventListener('cookie-change', handleCookieChange);
+    
+    return () => {
+      window.removeEventListener('cookie-change', handleCookieChange);
+    };
+  }, [id, mutate]);
+
   return (
     <div className="flex flex-col min-w-0 h-dvh bg-background">
       <ChatHeader
         chatId={id}
-        selectedModelId={chat?.model || selectedChatModel}
+        selectedModelId={currentModel}
         selectedVisibilityType={chat?.visibility || selectedVisibilityType}
         isReadonly={actualReadonly}
         isLoading={isLoading}
         isProcessingFile={isProcessingFile}
+        onModelChange={setCurrentModel}
       />
 
       <Messages

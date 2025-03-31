@@ -90,6 +90,7 @@ interface ChatHeaderProps {
   isReadonly: boolean;
   isLoading: boolean;
   isProcessingFile: boolean;
+  onModelChange?: (modelId: string) => void;
 }
 
 function PureChatHeader({
@@ -99,6 +100,7 @@ function PureChatHeader({
   isReadonly,
   isLoading,
   isProcessingFile,
+  onModelChange,
 }: ChatHeaderProps) {
   const router = useRouter();
   const { open } = useSidebar();
@@ -133,6 +135,7 @@ function PureChatHeader({
         <ModelSelector 
           selectedModelId={selectedModelId} 
           className="order-1 md:order-2"
+          onModelChange={onModelChange}
         />
         <VisibilitySelector
           chatId={chatId}
@@ -147,8 +150,5 @@ function PureChatHeader({
     </header>
   );
 }
-export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
-  return prevProps.selectedModelId === nextProps.selectedModelId &&
-         prevProps.isLoading === nextProps.isLoading;
-});
+export const ChatHeader = memo(PureChatHeader);
 
