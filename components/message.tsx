@@ -1,12 +1,13 @@
 "use client";
 
-import type { ChatRequestOptions, Message } from "ai";
+import type { ChatRequestOptions, Message, ToolInvocation } from "ai";
 import cx from "classnames";
 import { AnimatePresence, motion } from "framer-motion";
 import { memo, useState, useEffect, useMemo, useRef } from "react";
 import type { Vote } from "@/lib/db/schema";
 import { DocumentToolCall, DocumentToolResult } from "./document";
 import { PencilEditIcon, SparklesIcon } from "./icons";
+import { Search } from "lucide-react";
 import { Markdown } from "./markdown";
 import { MessageActions } from "./message-actions";
 // Removed import { Weather } from "./weather";
@@ -21,6 +22,11 @@ import { debug } from "@/lib/utils/debug";
 import { PreviewAttachment } from './preview-attachment';
 import { SearchResults } from './search-results';
 import { SearchResultItem } from '@/lib/ai/tools/search';
+import { CollapsibleMessage } from './collapsible-message';
+import { StreamingMarkdown } from "./streaming-markdown";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import Link from "next/link";
+import { Globe, ChevronDown } from "lucide-react";
 
 interface DocumentToolInvocation {
   toolName: string;
@@ -41,49 +47,113 @@ interface ToolInvocationCall extends ToolInvocationBase {
 
 interface ToolInvocationResult extends ToolInvocationBase {
   state: 'result';
-  result: { id: string; title: string; kind: string; content?: string };
+  result: any;
 }
 
-type ToolInvocation = ToolInvocationCall | ToolInvocationResult;
+type ExtendedToolInvocation = ToolInvocationCall | ToolInvocationResult;
+
+// Add this interface for search results that includes searchQuery
+interface ExtendedSearchResultItem {
+  title: string;
+  url: string;
+  content: string;
+  searchQuery?: string;
+}
 
 function extractTextFromContent(content: any): string {
-  // If content is a string, try to parse it as JSON first
-  if (typeof content === 'string') {
-    try {
-      const parsed = JSON.parse(content);
-      return extractTextFromContent(parsed);
-    } catch {
-      return content;
-    }
-  }
-
-  // Handle array content
+  if (content === null || content === undefined) return '';
+  if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
-    return content.map(item => extractTextFromContent(item)).join('\n');
+    return content
+      .map(item => item?.type === 'text' ? item.text : '') // Only extract text parts
+      .filter(Boolean)
+      .join('\n');
   }
-
-  // Handle object content
   if (typeof content === 'object' && content !== null) {
-    // If this is a document object or has a document type, return empty string
-    if (content.type === 'document' || content.kind === 'document') {
-      return '';
-    }
-    // If content has a text property, use that
-    if ('text' in content) {
-      return content.text;
-    }
-    // If content has a content property, extract from that
-    if ('content' in content) {
-      return extractTextFromContent(content.content);
-    }
-    // If content has a result property, extract from that
-    if ('result' in content) {
-      return extractTextFromContent(content.result);
-    }
+    if (content.type === 'document' || content.kind === 'document') return '';
+    if ('text' in content) return String(content.text || '');
+    if ('content' in content) return extractTextFromContent(content.content);
+    if ('result' in content) return extractTextFromContent(content.result);
   }
-
-  // Fallback to string conversion
   return String(content || '');
+}
+
+function extractSearchResults(data: any): SearchResultItem[] {
+  try {
+    if (!data) return [];
+    if (Array.isArray(data)) return data as SearchResultItem[]; // Direct array
+    if (typeof data === 'object' && data !== null) {
+      if (Array.isArray(data.results)) return data.results as SearchResultItem[]; // Object with results array
+    }
+    if (typeof data === 'string') { // JSON string
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) return parsed as SearchResultItem[];
+      if (parsed && Array.isArray(parsed.results)) return parsed.results as SearchResultItem[];
+    }
+  } catch (e) {
+    console.error("Failed to parse search data", e);
+  }
+  return []; // Default empty
+}
+
+function extractSearchQuery(data: any, args?: any): string {
+   try {
+    if (data && typeof data === 'object') {
+      if (typeof data.query === 'string') return data.query;
+      if (data.args && typeof data.args === 'object' && typeof data.args.query === 'string') return data.args.query;
+    }
+    // Fallback to args if provided
+    if (args && typeof args === 'object' && typeof args.query === 'string') {
+      return args.query;
+    }
+    // Try parsing if data is a string
+    if (typeof data === 'string') {
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed.query === 'string') return parsed.query;
+      if (parsed && parsed.args && typeof parsed.args.query === 'string') return parsed.args.query;
+    }
+  } catch (e) {
+     console.error("Failed to parse search query", e);
+  }
+  return ""; // Default empty
+}
+
+// Safe function to get hostname from URL
+function getHostname(url: string): string {
+  if (!url || url === '#' || url === 'about:blank') return '';
+  
+  try {
+    // If URL doesn't start with http:// or https://, add https://
+    let urlToProcess = url;
+    if (!/^https?:\/\//i.test(urlToProcess)) {
+      urlToProcess = 'https://' + urlToProcess;
+    }
+    
+    return new URL(urlToProcess).hostname;
+  } catch (e) {
+    // Don't log errors during render
+    return '';
+  }
+}
+
+// Display URL name function
+function displayUrlName(url: string): string {
+  if (!url || url === '#' || url === 'about:blank') return 'No source';
+  
+  try {
+    // If URL doesn't start with http:// or https://, add https://
+    let urlToProcess = url;
+    if (!/^https?:\/\//i.test(urlToProcess)) {
+      urlToProcess = 'https://' + urlToProcess;
+    }
+    
+    const hostname = new URL(urlToProcess).hostname;
+    const parts = hostname.split('.');
+    return parts.length > 2 ? parts.slice(1, -1).join('.') : parts[0];
+  } catch (e) {
+    // Don't log errors during render
+    return 'Unknown source';
+  }
 }
 
 const PurePreviewMessage = ({
@@ -109,8 +179,13 @@ const PurePreviewMessage = ({
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const originalMessageId = useRef(message.id);
+  
+  // Track open/closed state for each search invocation - initialize 'search-group' to false to start collapsed
+  const [collapsibleStates, setCollapsibleStates] = useState<Record<string, boolean>>({
+    'search-group': false // Start collapsed by default
+  });
 
-  // Use the original message ID for tool invocations to maintain stability
+  // Memoize stable message ID
   const messageWithStableId = useMemo(() => ({
     ...message,
     id: originalMessageId.current,
@@ -118,37 +193,45 @@ const PurePreviewMessage = ({
   }), [message, chatId]);
 
   useEffect(() => {
-    debug('message', 'Message rendered', {
+    debug('message', 'PreviewMessage rendered', {
       messageId: messageWithStableId.id,
       role: messageWithStableId.role,
-      content: typeof messageWithStableId.content === 'string' ? `${messageWithStableId.content?.substring(0, 100)}...` : `${JSON.stringify(messageWithStableId.content)?.substring(0, 100)}...`,
+      contentLength: typeof messageWithStableId.content === 'string' ? messageWithStableId.content.length : -1,
       hasToolInvocations: !!messageWithStableId.toolInvocations?.length,
-      toolInvocations: messageWithStableId.toolInvocations?.map(t => ({
-        state: t.state,
-        toolName: t.toolName,
-        toolCallId: t.toolCallId
-      })),
-      isLoading
+      isLoadingProp: isLoading
     });
   }, [messageWithStableId, isLoading]);
 
-  if (!messageWithStableId.content && messageWithStableId.role === 'assistant' && !isLoading) {
-    return null;
+  const mainContent = useMemo(() => extractTextFromContent(messageWithStableId.content), [messageWithStableId.content]);
+  const searchInvocations = useMemo(() =>
+    (messageWithStableId.toolInvocations as ExtendedToolInvocation[])?.filter(t => t?.toolName === 'search') || [],
+    [messageWithStableId.toolInvocations]
+  );
+  const otherToolInvocations = useMemo(() =>
+    (messageWithStableId.toolInvocations as ExtendedToolInvocation[])?.filter(t => t?.toolName !== 'search') || [],
+    [messageWithStableId.toolInvocations]
+  );
+
+  if (messageWithStableId.role === 'assistant' && !mainContent && searchInvocations.length === 0 && otherToolInvocations.length === 0 && !isLoading) {
+     return null;
   }
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait" initial={false}>
       <motion.div
+        key={messageWithStableId.id}
         className="w-full mx-auto max-w-3xl px-4 group/message"
         initial={{ y: 5, opacity: 0, x: -5 }}
         animate={{ y: 0, opacity: 1, x: 0 }}
+        exit={{ opacity: 0, transition: { duration: 0.15 } }}
         style={{ direction: 'ltr' }}
         data-role={messageWithStableId.role}
         data-message-id={messageWithStableId.id}
       >
         <div
           className={cn(
-            'flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl',
+            'flex gap-4 w-full',
+            messageWithStableId.role === 'user' && 'group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl',
             {
               'w-full': mode === 'edit',
               'group-data-[role=user]/message:w-fit': mode !== 'edit',
@@ -182,12 +265,12 @@ const PurePreviewMessage = ({
 
             {messageWithStableId.reasoning && (
               <MessageReasoning
-                isLoading={isLoading}
+                isLoading={messageWithStableId.role === 'assistant' ? isLoading : false}
                 reasoning={messageWithStableId.reasoning}
               />
             )}
 
-            {(messageWithStableId.content || messageWithStableId.reasoning) && mode === 'view' && (
+            {(mainContent || (messageWithStableId.role === 'assistant' && isLoading)) && mode === 'view' && (
               <div className={cn(
                 "flex flex-row gap-2 items-start",
                 messageWithStableId.role === 'user' && messageWithStableId.experimental_attachments?.length 
@@ -217,31 +300,10 @@ const PurePreviewMessage = ({
                       messageWithStableId.role === 'user',
                   })}
                 >
-                  <div className="!mb-0">
-                    <Markdown className="[&_*]:!text-inherit [&_p]:!m-0 [&>*:last-child]:!mb-0 [&>*:first-child]:!mt-0">
-                      {(() => {
-                        const content = messageWithStableId.content;
-                        
-                        // If content is already a string, try to parse it as JSON
-                        if (typeof content === 'string') {
-                          try {
-                            const parsed = JSON.parse(content);
-                            return extractTextFromContent(parsed);
-                          } catch {
-                            return content;
-                          }
-                        }
-                        
-                        // If content is an object, try to extract text directly
-                        if (typeof content === 'object' && content !== null) {
-                          return extractTextFromContent(content);
-                        }
-                        
-                        // Fallback to string conversion
-                        return String(content || '');
-                      })()}
-                    </Markdown>
-                  </div>
+                  <StreamingMarkdown 
+                    content={mainContent} 
+                    messageId={messageWithStableId.id}
+                  />
                 </div>
               </div>
             )}
@@ -251,7 +313,7 @@ const PurePreviewMessage = ({
                 <div className="size-8" />
 
                 <MessageEditor
-                  key={messageWithStableId.id}
+                  key={`editor-${messageWithStableId.id}`}
                   message={{ ...messageWithStableId, chatId }}
                   setMode={setMode}
                   setMessages={setMessages}
@@ -260,70 +322,216 @@ const PurePreviewMessage = ({
               </div>
             )}
 
-            {messageWithStableId.toolInvocations && messageWithStableId.toolInvocations.length > 0 && (
+            {searchInvocations.length > 0 && (
               <div className="flex flex-col gap-4">
-                {messageWithStableId.toolInvocations.map((toolInvocation) => {
-                  const { toolName, toolCallId, state, args } = toolInvocation;
+                <div className="max-w-2xl mx-auto w-full">
+                  <div className="flex gap-3">
+                    <div className="relative flex flex-col items-center">
+                      <div className="mt-4 w-5">
+                        <Globe size={20} className="text-muted-foreground" />
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 rounded-2xl p-4 border border-border/50">
+                      {/* Custom collapsible component */}
+                      <div className="w-full">
+                        {/* Header with trigger */}
+                        <button 
+                          onClick={() => {
+                            setCollapsibleStates(prev => ({
+                              ...prev,
+                              'search-group': !prev['search-group']
+                            }));
+                          }}
+                          className="flex items-center justify-between w-full group"
+                        >
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <div className="text-sm w-full">
+                              <div className="flex justify-between items-center w-full">
+                                <span className="font-medium">Search Results</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({searchInvocations.length} {searchInvocations.length === 1 ? 'search' : 'searches'})
+                                </span>
+                              </div>
+                            </div>
+                            <ChevronDown 
+                              className={cn(
+                                "size-4 text-muted-foreground transition-transform duration-200",
+                                collapsibleStates['search-group'] && "rotate-180"
+                              )} 
+                            />
+                          </div>
+                        </button>
+                        
+                        {/* Content */}
+                        {!collapsibleStates['search-group'] ? (
+                          // Show collapsed preview content
+                          <>
+                            <div className="my-4 border-t border-border/50" />
+                            {/* Query tags */}
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {(() => {
+                                // Get all queries
+                                const allQueries = searchInvocations.map(invocation => {
+                                  const { state, args } = invocation;
+                                  const isSearchLoading = state === 'call';
+                                  const result = isSearchLoading ? null : (invocation as ToolInvocationResult).result;
+                                  return extractSearchQuery(isSearchLoading ? args : result, args);
+                                }).filter(Boolean);
+                                
+                                return allQueries.map((query, index) => (
+                                  <span 
+                                    key={index}
+                                    className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-muted"
+                                  >
+                                    {query}
+                                  </span>
+                                ));
+                              })()}
+                            </div>
 
-                  if (state === 'result') {
-                    const { result } = toolInvocation;
-
-                    return (
-                      <div key={toolCallId}>
-                        {toolName === 'updateDocument' ? (
-                          <DocumentToolResult
-                            type="update"
-                            result={result}
-                            isReadonly={isReadonly}
-                          />
-                        ) : toolName === 'requestSuggestions' ? (
-                          <DocumentToolResult
-                            type="request-suggestions"
-                            result={result}
-                            isReadonly={isReadonly}
-                          />
-                        ) : toolName === 'search' ? (
-                          <SearchResults 
-                            results={((result as any)?.results || []) as SearchResultItem[]} 
-                            query={(result as any)?.query || ""}
-                            isLoading={false}
-                          />
+                            {/* Preview of top result from each search */}
+                            <div className="grid grid-cols-2 gap-3">
+                              {(() => {
+                                // Get a preview of results
+                                const previewResults = searchInvocations.reduce((acc, invocation) => {
+                                  const { state, args } = invocation;
+                                  if (state === 'result') {
+                                    const result = (invocation as ToolInvocationResult).result;
+                                    const query = extractSearchQuery(result, args);
+                                    const results = extractSearchResults(result);
+                                    
+                                    // Take the first result from each search query if available
+                                    if (results.length > 0) {
+                                      acc.push({
+                                        ...results[0],
+                                        searchQuery: query || 'Search'
+                                      } as ExtendedSearchResultItem);
+                                    }
+                                  }
+                                  return acc;
+                                }, [] as ExtendedSearchResultItem[]);
+                                
+                                // Show up to 4 preview results
+                                return previewResults.slice(0, 4).map((result, index) => (
+                                  <Link 
+                                    href={result.url} 
+                                    passHref 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    key={index}
+                                    className="block"
+                                  >
+                                    <div className="border rounded-md p-2 hover:bg-muted/50 transition-colors flex flex-col">
+                                      <p className="text-xs line-clamp-1 font-medium text-blue-600 dark:text-blue-400 text-left">
+                                        {result.title || result.content.substring(0, 60)}
+                                      </p>
+                                      <div className="mt-1 flex items-center space-x-1">
+                                        <Avatar className="size-3 flex-shrink-0">
+                                          <AvatarImage
+                                            src={`https://www.google.com/s2/favicons?domain=${getHostname(result.url)}`}
+                                            alt={getHostname(result.url)}
+                                          />
+                                          <AvatarFallback className="text-[6px]">
+                                            {getHostname(result.url)[0]?.toUpperCase() || '?'}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div className="text-[10px] text-muted-foreground truncate text-left">
+                                          {displayUrlName ? displayUrlName(result.url) : getHostname(result.url)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </Link>
+                                ));
+                              })()}
+                            </div>
+                          </>
                         ) : (
-                          <pre>{JSON.stringify(result, null, 2)}</pre>
+                          // Show expanded full results
+                          <>
+                            <div className="my-4 border-t border-border/50" />
+                            {(() => {
+                              const allSearches = searchInvocations.map(invocation => {
+                                const { toolCallId, state, args } = invocation;
+                                const isSearchLoading = state === 'call';
+                                const result = isSearchLoading ? null : (invocation as ToolInvocationResult).result;
+                                const query = extractSearchQuery(isSearchLoading ? args : result, args);
+                                const results = extractSearchResults(isSearchLoading ? [] : result);
+                                
+                                return {
+                                  toolCallId,
+                                  query,
+                                  results,
+                                  isLoading: isSearchLoading
+                                };
+                              });
+                              
+                              const isAnySearchLoading = allSearches.some(search => search.isLoading);
+                              
+                              const allQueries = allSearches
+                                .map(search => search.query)
+                                .filter(Boolean);
+                              
+                              const allResults = allSearches
+                                .flatMap(search => 
+                                  search.results.map(result => ({
+                                    ...result,
+                                    searchQuery: search.query
+                                  }))
+                                );
+                              
+                              return (
+                                <div>
+                                  <SearchResults
+                                    results={allResults}
+                                    query={allQueries.join(', ')}
+                                    isLoading={isAnySearchLoading}
+                                    isConsolidated={true}
+                                  />
+                                </div>
+                              );
+                            })()}
+                          </>
                         )}
                       </div>
-                    );
-                  }
-                  return (
-                    <div
-                      key={toolCallId}
-                    >
-                      {toolName === 'updateDocument' ? (
-                        <DocumentToolCall
-                          type="update"
-                          args={args}
-                          isReadonly={isReadonly}
-                        />
-                      ) : toolName === 'requestSuggestions' ? (
-                        <DocumentToolCall
-                          type="request-suggestions"
-                          args={args}
-                          isReadonly={isReadonly}
-                        />
-                      ) : toolName === 'search' ? (
-                        <SearchResults 
-                          results={((args as any)?.results || []) as SearchResultItem[]} 
-                          query={(args as any)?.query || ""}
-                          isLoading={true}
-                        />
-                      ) : null}
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
             )}
 
-            {!isReadonly && (
+            {otherToolInvocations.length > 0 && (
+               <div className="flex flex-col gap-4">
+                 {otherToolInvocations.map((toolInvocation) => {
+                   const { toolName, toolCallId, state, args } = toolInvocation;
+                   if (state === 'result') {
+                     const result = (toolInvocation as ToolInvocationResult).result;
+                     return (
+                       <div key={toolCallId}>
+                         {toolName === 'updateDocument' ? (
+                           <DocumentToolResult type="update" result={result} isReadonly={isReadonly} />
+                         ) : toolName === 'requestSuggestions' ? (
+                           <DocumentToolResult type="request-suggestions" result={result} isReadonly={isReadonly} />
+                         ) : (
+                           <pre>{JSON.stringify(result, null, 2)}</pre>
+                         )}
+                       </div>
+                     );
+                   }
+                   return (
+                     <div key={toolCallId}>
+                       {toolName === 'updateDocument' ? (
+                         <DocumentToolCall type="update" args={args} isReadonly={isReadonly} />
+                       ) : toolName === 'requestSuggestions' ? (
+                         <DocumentToolCall type="request-suggestions" args={args} isReadonly={isReadonly} />
+                       ) : null}
+                     </div>
+                   );
+                 })}
+               </div>
+            )}
+
+            {!isReadonly && messageWithStableId.role === 'assistant' && (
               <MessageActions
                 key={`action-${messageWithStableId.id}`}
                 chatId={chatId}
@@ -340,19 +548,19 @@ const PurePreviewMessage = ({
 };
 
 export const PreviewMessage = memo(PurePreviewMessage, (prevProps, nextProps) => {
-  // Only re-render if loading state changes
-  if (prevProps.isLoading !== nextProps.isLoading) return false;
-  
-  // Re-render if message content changes
-  if (prevProps.message.content !== nextProps.message.content) return false;
-  
-  // Re-render if tool invocations change
-  if (!equal(prevProps.message.toolInvocations, nextProps.message.toolInvocations)) return false;
-  
-  // Re-render if vote changes
-  if (!equal(prevProps.vote, nextProps.vote)) return false;
-
-  // Otherwise, prevent re-render
+  if (prevProps.isLoading !== nextProps.isLoading) {
+     console.log('[PreviewMessage Memo] isLoading changed');
+     return false;
+  }
+  if (!equal(prevProps.vote, nextProps.vote)) {
+     console.log('[PreviewMessage Memo] vote changed');
+     return false;
+  }
+  if (!equal(prevProps.message, nextProps.message)) {
+     console.log('[PreviewMessage Memo] message object changed (deep)');
+     return false;
+  }
+  console.log('[PreviewMessage Memo] Skipping re-render for message ID:', nextProps.message.id);
   return true;
 });
 

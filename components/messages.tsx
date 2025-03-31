@@ -3,11 +3,12 @@ import type { ChatRequestOptions, Message, ToolInvocation } from 'ai';
 import { PreviewMessage, ThinkingMessage } from './message';
 import { useScrollToBottom } from './use-scroll-to-bottom';
 import { Overview } from './overview';
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import equal from 'fast-deep-equal';
 import { debug } from '@/lib/utils/debug';
-import { GroupedSearchSection } from '@/components/search-section';
+// GroupedSearchSection is no longer used directly here
+// import { GroupedSearchSection } from '@/components/search-section';
 
 interface MessagesProps {
   chatId: string;
@@ -26,15 +27,7 @@ interface MessagesProps {
   handleSubmit?: (e: FormEvent<HTMLFormElement>) => void;
 }
 
-// Function to check if a message is a search tool invocation
-function isSearchToolInvocation(message: Message): boolean {
-  return (
-    message.role === 'assistant' &&
-    Array.isArray(message.toolInvocations) &&
-    message.toolInvocations.length > 0 &&
-    message.toolInvocations.every(inv => inv.toolName === 'search')
-  );
-}
+// Removed isSearchToolInvocation function as grouping is removed
 
 function PureMessages({
   chatId,
@@ -51,77 +44,37 @@ function PureMessages({
   const [messagesContainerRef, messagesEndRef] =
     useScrollToBottom<HTMLDivElement>();
 
-  // Keep track of previous values for comparison
+  // Keep track of previous values for comparison (optional, for debugging)
   const prevStateRef = useRef({
-    messageCount: 0,
-    isLoading: false,
-    isReadonly: false
+    messageCount: messages.length,
+    isLoading: isLoading,
   });
 
-  // Memoize the message data for debugging to avoid recalculation
-  const messageDebugData = useMemo(() => ({
-    messageCount: messages.length,
-    systemMessageCount: messages.filter(msg => msg.role === 'system').length,
-    userMessageCount: messages.filter(msg => msg.role === 'user').length,
-    assistantMessageCount: messages.filter(msg => msg.role === 'assistant').length,
-    messages: messages.map(m => ({
-      id: m.id,
-      role: m.role,
-      contentPreview: typeof m.content === 'string' ? m.content.slice(0, 50) : 'non-string content',
-      hasToolInvocations: !!m.toolInvocations?.length,
-      toolInvocationStates: m.toolInvocations?.map(t => t.state),
-      isSystem: m.role === 'system' && typeof m.content === 'string' && m.content.startsWith('Document Intelligence Analysis:')
-    })),
-    lastMessageRole: messages[messages.length - 1]?.role,
-    lastMessageId: messages[messages.length - 1]?.id,
-    voteCount: votes.length
-  }), [messages, votes]);
-
-  // Use useEffect for debug logging with stable dependencies
   useEffect(() => {
-    const currentState = {
-      messageCount: messages.length,
-      isLoading,
-      isReadonly
-    };
-
-    // Only log if something changed
-    if (!equal(currentState, prevStateRef.current)) {
-      debug('message', 'Messages state updated', {
-        chatId,
-        ...messageDebugData,
-        isLoading,
-        isReadonly,
-        stateChange: {
-          from: prevStateRef.current,
-          to: currentState
-        }
-      });
-      prevStateRef.current = currentState;
+    if (process.env.NODE_ENV === 'development') {
+      const currentCount = messages.length;
+      if (prevStateRef.current.messageCount !== currentCount || prevStateRef.current.isLoading !== isLoading) {
+         debug('message', 'PureMessages rendering', {
+           chatId,
+           messageCount: currentCount,
+           isLoading,
+           lastMessageContentLength: messages[currentCount -1]?.content?.length,
+           lastMessageToolInvocations: messages[currentCount -1]?.toolInvocations?.length,
+         });
+         prevStateRef.current = { messageCount: currentCount, isLoading };
+      }
     }
-  }, [messageDebugData, isLoading, isReadonly, chatId, messages.length]);
+  }, [messages, isLoading, chatId]);
 
   // Filter out system messages containing document intelligence analysis
   const visibleMessages = useMemo(() => {
-    const filtered = messages.filter(msg => 
-      !(msg.role === 'system' && 
-        typeof msg.content === 'string' && 
+    const filtered = messages.filter(msg =>
+      !(msg.role === 'system' &&
+        typeof msg.content === 'string' &&
         msg.content.startsWith('Document Intelligence Analysis:'))
     );
-
-    if (process.env.NODE_ENV === 'development') {
-      debug('message', 'Filtered visible messages', {
-        chatId,
-        totalMessages: messages.length,
-        visibleMessages: filtered.length,
-        hiddenSystemMessages: messages.length - filtered.length,
-        firstVisibleRole: filtered[0]?.role,
-        lastVisibleRole: filtered[filtered.length - 1]?.role
-      });
-    }
-
     return filtered;
-  }, [messages, chatId]);
+  }, [messages]);
 
   // Scroll to bottom when new messages are added
   useEffect(() => {
@@ -133,54 +86,11 @@ function PureMessages({
 
   // Show overview only if there are no messages or only system messages
   const showOverview = useMemo(() => {
-    const shouldShow = visibleMessages.length === 0 || 
+    return visibleMessages.length === 0 ||
       (visibleMessages.length === messages.filter(m => m.role === 'system').length);
+  }, [visibleMessages.length, messages]);
 
-    if (process.env.NODE_ENV === 'development') {
-      debug('message', 'Overview visibility calculated', {
-        chatId,
-        showOverview: shouldShow,
-        visibleMessageCount: visibleMessages.length,
-        systemMessageCount: messages.filter(m => m.role === 'system').length,
-        isReadonly
-      });
-    }
-
-    return shouldShow;
-  }, [visibleMessages.length, messages, chatId, isReadonly]);
-
-  // --- Grouping Logic --- 
-  const groupedMessages: (Message | { type: 'grouped-search'; invocations: ToolInvocation[], id: string })[] = [];
-  let i = 0;
-  while (i < visibleMessages.length) {
-    const currentMessage = visibleMessages[i];
-
-    if (isSearchToolInvocation(currentMessage)) {
-      const searchGroup: ToolInvocation[] = [...(currentMessage.toolInvocations || [])];
-      let j = i + 1;
-      // Look ahead for more consecutive search invocations
-      while (j < visibleMessages.length && isSearchToolInvocation(visibleMessages[j])) {
-        searchGroup.push(...(visibleMessages[j].toolInvocations || []));
-        j++;
-      }
-
-      if (searchGroup.length > 0) { // Should always be > 0 if we entered the if
-          groupedMessages.push({
-            type: 'grouped-search',
-            invocations: searchGroup,
-            id: currentMessage.id // Use the first message's ID for key
-          });
-          i = j; // Move index past the grouped messages
-          continue; // Skip adding the individual message
-      }
-    }
-    
-    // If not a search message or not part of a group, add it individually
-    groupedMessages.push(currentMessage);
-    i++;
-  }
-  // --- End Grouping Logic ---
-
+  // --- Single Rendering Logic ---
   return (
     <div
       ref={messagesContainerRef}
@@ -188,44 +98,25 @@ function PureMessages({
     >
       {showOverview && <Overview />}
 
-      {/* Render grouped or individual messages */}
-      {groupedMessages.map((item, index) => {
-        if ('type' in item && item.type === 'grouped-search') {
-          return (
-            <GroupedSearchSection 
-              key={item.id} 
-              invocations={item.invocations} 
-              chatId={chatId}
-            />
-          );
-        } else {
-          // Render individual message using PreviewMessage
-          const message = item as Message;
-          // Determine isLoading for individual messages correctly
-          // isLoading is true only if it's the *very last* item in the *original* messages array AND the overall chat is loading
-          const isLastOriginalMessage = index === groupedMessages.length - 1 && messages.length > 0 && message.id === messages[messages.length - 1].id;
-          const individualIsLoading = isLoading && isLastOriginalMessage;
+      {/* Use direct rendering for ALL messages */}
+      {visibleMessages.map((message, index) => (
+        <PreviewMessage
+          key={message.id} // Use message ID as key
+          chatId={chatId}
+          message={message}
+          isLoading={isLoading && index === messages.length - 1} // Pass loading state for the last message
+          vote={votes?.find((vote) => vote.messageId === message.id)}
+          setMessages={setMessages}
+          reload={reload}
+          isReadonly={isReadonly}
+        />
+      ))}
 
-          return (
-            <PreviewMessage
-              key={message.id}
-              chatId={chatId}
-              message={message}
-              isLoading={individualIsLoading} 
-              vote={votes?.find((vote) => vote.messageId === message.id)}
-              setMessages={setMessages}
-              reload={reload}
-              isReadonly={isReadonly}
-            />
-          );
-        }
-      })}
-
-      {/* Thinking indicator logic might need adjustment if grouping affects the last message */}
+      {/* Simple Thinking indicator */}
       {isLoading &&
         messages.length > 0 &&
-        !isSearchToolInvocation(messages[messages.length - 1]) && // Only show if last msg isn't search
-        messages[messages.length - 1].role === 'user' && <ThinkingMessage />}
+        messages[messages.length - 1].role === 'user' &&
+        <ThinkingMessage />}
 
       <div
         ref={messagesEndRef}
@@ -235,16 +126,30 @@ function PureMessages({
   );
 }
 
+// Apply robust memoization using deep equality for messages
 export const Messages = memo(PureMessages, (prevProps, nextProps) => {
-  if (prevProps.isLoading !== nextProps.isLoading) return false;
-  if (prevProps.isLoading && nextProps.isLoading) return false;
-  
+  // Always re-render if loading state changes
+  if (prevProps.isLoading !== nextProps.isLoading) {
+      return false; // Needs re-render
+  }
+
+  // If message arrays differ deeply, update.
   const prevMessages = prevProps.messages || [];
   const nextMessages = nextProps.messages || [];
-  
-  if (prevMessages.length !== nextMessages.length) return false;
-  if (!equal(prevMessages, nextMessages)) return false;
-  if (!equal(prevProps.votes, nextProps.votes)) return false;
+  if (!equal(prevMessages, nextMessages)) {
+      return false; // Needs re-render for streaming or other changes
+  }
 
+  // If votes changed (deep compare).
+  if (!equal(prevProps.votes, nextProps.votes)) {
+    return false; // Needs re-render
+  }
+
+  // If other relevant props change
+  if (prevProps.chatId !== nextProps.chatId || prevProps.isReadonly !== nextProps.isReadonly) {
+     return false;
+  }
+
+  // Otherwise, assume messages are stable and don't re-render
   return true;
 });

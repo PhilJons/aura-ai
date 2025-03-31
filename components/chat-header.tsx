@@ -147,8 +147,8 @@ function PureChatHeader({
     </header>
   );
 }
-
 export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
   return prevProps.selectedModelId === nextProps.selectedModelId &&
          prevProps.isLoading === nextProps.isLoading;
 });
+

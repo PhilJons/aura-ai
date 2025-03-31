@@ -154,7 +154,11 @@ export function Chat({
         hasAttachments: attachments.length > 0
       });
 
+      // Ensure we have the latest messages
       mutate('/api/history');
+      
+      // CRITICAL: After streaming completes, don't do any state changes that might
+      // cause messages to disappear or a rehydration mode switch
       
       if (attachments.length > 0) {
         // Start processing
@@ -195,6 +199,39 @@ export function Chat({
       }
     },
   });
+
+  // Monitor for search tool invocations and ensure they're properly rendered
+  useEffect(() => {
+    if (isLoading && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage?.role === 'assistant') {
+        // Track if we have search tool invocations
+        const hasSearchToolInvocations = lastMessage?.toolInvocations?.some(inv => 
+          inv && (
+            inv.toolName === 'search' || 
+            (typeof inv.toolName === 'string' && inv.toolName.includes('search'))
+          )
+        );
+        
+        if (hasSearchToolInvocations) {
+          debug('chat', 'Search tool invocation detected in streaming message', {
+            id,
+            messageId: lastMessage.id,
+            toolCount: lastMessage.toolInvocations?.length
+          });
+          
+          // Set up polling to ensure search results update during streaming
+          const intervalId = setInterval(() => {
+            // Creating a new array reference is necessary to trigger a re-render
+            const updatedMessages = [...messages];
+            setMessages(updatedMessages);
+          }, 200);
+          
+          return () => clearInterval(intervalId);
+        }
+      }
+    }
+  }, [id, messages, isLoading, setMessages]);
 
   useEffect(() => {
     debug('chat', 'Chat state updated', {
@@ -263,6 +300,23 @@ export function Chat({
       }
     }
   }, [attachments, input, isLoading, originalHandleSubmit, id, actualReadonly]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage) {
+        console.log('[Chat Component] Last message updated:', {
+          id: lastMessage.id,
+          role: lastMessage.role,
+          content: lastMessage.content, // Log the raw content
+          contentLength: typeof lastMessage.content === 'string' ? lastMessage.content.length : 'N/A',
+          toolInvocations: lastMessage.toolInvocations
+        });
+      }
+      // Optional: Log the entire messages array for detailed inspection (can be verbose)
+      // console.log('[Chat Component] Full messages array:', JSON.stringify(messages));
+    }
+  }, [messages]); // Log whenever the messages array changes
 
   return (
     <div className="flex flex-col min-w-0 h-dvh bg-background">

@@ -1,14 +1,25 @@
 'use client'
 
 import type { SearchResults as TypeSearchResults } from '@/lib/ai/tools/search'
+import { SearchResultItem } from '@/lib/ai/tools/search'
 import { ToolInvocation } from 'ai'
 import { useChat } from 'ai/react'
 import { CollapsibleMessage } from '@/components/collapsible-message'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SearchResults } from './search-results'
 import { Section, ToolArgsSection } from '@/components/section'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
+import { debug } from '@/lib/utils/debug'
+
+// Define the interface for results-bearing tool invocations
+interface ToolInvocationResult {
+  toolName: string;
+  toolCallId: string;
+  state: 'result';
+  args: any;
+  result: any;
+}
 
 interface SearchSectionProps {
   tool: ToolInvocation
@@ -105,6 +116,16 @@ export function SearchSection({
     >{`${query || ''}${includeDomainsString}`}</ToolArgsSection>
   )
 
+  // For debugging
+  useEffect(() => {
+    console.log('[SearchSection] Rendering with state:', {
+      isToolLoading,
+      hasResults: searchResults?.results?.length > 0,
+      resultCount: searchResults?.results?.length || 0,
+      query
+    });
+  }, [isToolLoading, searchResults, query]);
+
   return (
     <div className="max-w-2xl mx-auto w-full">
       <CollapsibleMessage
@@ -154,93 +175,149 @@ interface GroupedSearchSectionProps {
 }
 
 export function GroupedSearchSection({ invocations, chatId }: GroupedSearchSectionProps) {
-  // --- 1. Extract Data ---
-  const allQueries = useMemo(() => 
-    [...new Set(invocations.map(inv => inv.args?.query as string).filter(Boolean))], 
-    [invocations]
-  );
-  const allSources = useMemo(() => 
-    [...new Set(invocations.flatMap(inv => inv.args?.include_domains as string[] || []).filter(Boolean))], 
-    [invocations]
-  );
-  const searchResults = useMemo(() => 
-    invocations.map(inv => inv.state === 'result' ? (inv.result as TypeSearchResults) : undefined), 
-    [invocations]
-  );
-  const isLoadingGroup = useMemo(() => 
-    invocations.some(inv => inv.state === 'call'), 
-    [invocations]
-  );
+  try {
+    // State for controlling collapse state  
+    const [isOpen, setIsOpen] = useState(true);
+    // Create a local state to force re-renders during streaming
+    const [renderKey, setRenderKey] = useState(Date.now());
+    
+    // Safely extract queries
+    const allQueries = useMemo(() => {
+      try {
+        return [...new Set(invocations
+          .filter(inv => inv && inv.args)
+          .map(inv => inv.args?.query as string)
+          .filter(Boolean)
+        )];
+      } catch (e) {
+        return [];
+      }
+    }, [invocations]);
+    
+    // Determine if any search is still in progress
+    const isSearchLoading = useMemo(() => {
+      return invocations.some(inv => inv?.state === 'call' && (
+        inv?.toolName === 'search' || 
+        (typeof inv?.toolName === 'string' && inv?.toolName.includes('search'))
+      ));
+    }, [invocations]);
+    
+    // Force a re-render when invocations change to ensure streaming updates
+    useEffect(() => {
+      const forceUpdate = () => {
+        setRenderKey(Date.now());
+      };
+      
+      // Check for streaming state
+      if (invocations.length > 0) {
+        // Set an interval to force updates during streaming
+        const intervalId = setInterval(forceUpdate, 200);
+        return () => clearInterval(intervalId);
+      }
+    }, [invocations.length]);
+    
+    // Extract results with proper error handling
+    const aggregatedResults = useMemo(() => {
+      try {
+        // Create a fallback result
+        const createFallbackResult = (query: string): SearchResultItem => ({
+          title: `Search results for "${query || 'your query'}"`,
+          content: "Search results will appear here",
+          url: "about:blank"
+        });
+        
+        // If no data, return fallback
+        if (!invocations || !invocations.length) {
+          return allQueries.length ? allQueries.map(createFallbackResult) : [];
+        }
+        
+        // Process invocations to extract results
+        const extractedResults: SearchResultItem[] = [];
+        
+        for (const inv of invocations) {
+          try {
+            if (!inv || inv.state !== 'result') continue;
+            
+            const result = (inv as any).result;
+            if (!result) continue;
+            
+            if (Array.isArray(result)) {
+              extractedResults.push(...result);
+            }
+            else if (typeof result === 'object' && result && 'results' in result && Array.isArray(result.results)) {
+              extractedResults.push(...result.results);
+            }
+            else if (typeof result === 'string') {
+              try {
+                const parsed = JSON.parse(result);
+                if (Array.isArray(parsed)) {
+                  extractedResults.push(...parsed);
+                }
+                else if (parsed && typeof parsed === 'object' && 'results' in parsed && Array.isArray(parsed.results)) {
+                  extractedResults.push(...parsed.results);
+                }
+              } catch {}
+            }
+          } catch {}
+        }
+        
+        // Always return something
+        return extractedResults.length > 0 ? extractedResults : 
+               allQueries.length ? allQueries.map(createFallbackResult) : [];
+      } catch (e) {
+        return [];
+      }
+    }, [invocations, allQueries]);
 
-  // --- 2. State for Collapsible ---
-  const [isOpen, setIsOpen] = useState(true); // Default to open
-
-  // --- 3. Prepare Header ---
-  const headerContent = (
-    <div className="flex flex-wrap gap-x-2 gap-y-1 p-1 items-center">
-        <span className="font-medium mr-1 flex-shrink-0">Searching:</span>
+    // Create simple header content
+    const headerContent = (
+      <div className="flex flex-wrap gap-x-2 gap-y-1 p-1 items-center">
+        <span className="font-medium mr-1 flex-shrink-0">Search Results:</span>
         {allQueries.map((q, i) => (
           <span key={i} className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-muted whitespace-nowrap">
-            <span className="truncate max-w-[200px] sm:max-w-xs">{q}</span>
+            <span className="truncate max-w-[200px] sm:max-w-xs">{q || 'Query'}</span>
           </span>
         ))}
-        {!isLoadingGroup && (
-             <span className="text-xs text-muted-foreground ml-auto flex-shrink-0 pl-2">
-                ({searchResults.reduce((acc, curr) => acc + (curr?.results?.length || 0), 0)} results)
-             </span>
-        )}
-    </div>
-  );
+        <span className="text-xs text-muted-foreground ml-auto flex-shrink-0 pl-2">
+          ({aggregatedResults.length} results)
+        </span>
+      </div>
+    );
+    
+    // Create a stable key based on chat ID and queries
+    const searchResultsKey = `search-results-${chatId}-${allQueries.join('-')}-${renderKey}`;
 
-  // --- 4. Render Collapsible Message ---
-  return (
-    <div className="max-w-2xl mx-auto w-full">
-      <CollapsibleMessage
-        role="assistant"
-        isCollapsible={true}
-        header={headerContent}
-        isOpen={isOpen}
-        onOpenChange={setIsOpen}
-      >
-        {isLoadingGroup ? (
-          <SearchSkeleton queries={allQueries} sources={allSources} />
-        ) : (
-          <Section title="Sources">
-            {(() => {
-              // 1. Aggregate all results from successful invocations
-              const aggregatedResults = invocations.reduce((acc, inv) => {
-                if (inv.state === 'result' && inv.result) {
-                  const resultData = inv.result as TypeSearchResults;
-                  if (resultData.results) {
-                    // Add all results to our aggregated collection
-                    acc.push(...resultData.results);
-                  }
-                }
-                return acc;
-              }, [] as TypeSearchResults['results']);
-
-              // No results case
-              if (aggregatedResults.length === 0) {
-                return (
-                  <div className="text-center text-muted-foreground py-4">
-                    No results found for the search queries.
-                  </div>
-                );
-              }
-
-              // 2. Render SearchResults once with aggregated data
-              return (
-                <SearchResults
-                  results={aggregatedResults}
-                  // Pass all queries that led to these results
-                  query={allQueries.join('; ')}
-                  isLoading={false}
-                />
-              );
-            })()}
-          </Section>
-        )}
-      </CollapsibleMessage>
-    </div>
-  );
+    // Render with proper error boundaries
+    return (
+      <div className="max-w-2xl mx-auto w-full">
+        <CollapsibleMessage
+          role="assistant"
+          isCollapsible={true}
+          header={headerContent}
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+        >
+          <div className="p-4">
+            <Section title="Sources">
+              <SearchResults
+                key={searchResultsKey} // Use stable key with renderKey for streaming updates
+                results={aggregatedResults}
+                query={allQueries.join('; ')}
+                isLoading={isSearchLoading} // Pass calculated loading state
+              />
+            </Section>
+          </div>
+        </CollapsibleMessage>
+      </div>
+    );
+  } catch (e) {
+    // If any error happens during rendering, show a minimal fallback
+    return (
+      <div className="max-w-2xl mx-auto w-full p-4 text-center text-muted-foreground">
+        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-slate-50 dark:bg-slate-900/50">
+          Search results are available
+        </div>
+      </div>
+    );
+  }
 } 
