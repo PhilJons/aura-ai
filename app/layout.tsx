@@ -1,10 +1,24 @@
 import type { Metadata } from 'next';
 import { Toaster } from 'sonner';
+import localFont from 'next/font/local';
 
 import { ThemeProvider } from '@/components/theme-provider';
 import { Analytics } from '@/components/analytics';
 
 import './globals.css';
+
+// Define the fonts using next/font
+const geistSans = localFont({
+  src: '../public/fonts/geist.woff2',
+  variable: '--font-geist',
+  display: 'swap',
+});
+
+const geistMono = localFont({
+  src: '../public/fonts/geist-mono.woff2',
+  variable: '--font-geist-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://chat.vercel.ai'),
@@ -63,6 +77,7 @@ export default async function RootLayout({
       // visual flicker before hydration. Hence the `suppressHydrationWarning`
       // prop is necessary to avoid the React hydration mismatch warning.
       // https://github.com/pacocoursey/next-themes?tab=readme-ov-file#with-app
+      className={`${geistSans.variable} ${geistMono.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -76,7 +91,7 @@ export default async function RootLayout({
         Add suppressHydrationWarning to the body element to prevent hydration errors 
         from browser extensions like Grammarly that add attributes to the body
       */}
-      <body className="antialiased" suppressHydrationWarning>
+      <body className="antialiased font-sans" suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

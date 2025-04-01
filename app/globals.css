@@ -119,6 +119,8 @@
         --sidebar-ring: 217.2 91.2% 59.8%;
     }
 
+    /* Remove the old @font-face declarations since we're now using next/font */
+    /* 
     @font-face {
         font-family: "geist";
         font-style: normal;
@@ -132,6 +134,7 @@
         font-weight: 100 900;
         src: url(/fonts/geist-mono.woff2) format("woff2");
     }
+    */
 
     :root {
         --radius: var(--radius-sm);
