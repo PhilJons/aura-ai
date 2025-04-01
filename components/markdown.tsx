@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, Children, isValidElement, createElement, Fragment } from 'react';
+import { memo, Children, isValidElement, createElement, } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './code-block';
@@ -29,12 +29,12 @@ const processChildrenForCitations = (children: React.ReactNode): React.ReactNode
         // Avoid processing numbers that are part of sentences like "in 2023"
         if (textBeforeCitation.trim() === '' || textBeforeCitation.endsWith(' ')) {
           return (
-            <Fragment>
+            <>
               {textBeforeCitation}
-              <span className="inline-flex items-center justify-center h-5 w-5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full text-xs font-medium mx-0.5">
+              <span className="inline-flex items-center justify-center size-5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full text-xs font-medium mx-0.5">
                 {citationNumber}
               </span>
-            </Fragment>
+            </>
           );
         }
       }
@@ -45,10 +45,11 @@ const processChildrenForCitations = (children: React.ReactNode): React.ReactNode
     if (isValidElement(child) && child.props.children) {
       // Clone the element to avoid modifying the original props
       // Pass the processed children to the cloned element
-      return createElement(child.type, {
-        ...child.props,
-        children: processChildrenForCitations(child.props.children),
-      });
+      return createElement(
+        child.type,
+        { ...child.props },
+        processChildrenForCitations(child.props.children)
+      );
     }
 
     // Return other types of children (like numbers, null, etc.) as is
@@ -56,23 +57,24 @@ const processChildrenForCitations = (children: React.ReactNode): React.ReactNode
   });
 };
 
+// Create a wrapper component to handle code blocks
+const MarkdownCode = ({ node, inline, className, children }: any) => {
+  const content = String(children).replace(/\n$/, '');
+  const codeClassName = className || '';
+  
+  return (
+    <CodeBlock
+      node={node}
+      inline={!!inline}
+      className={codeClassName}
+    >
+      {content}
+    </CodeBlock>
+  );
+};
+
 const components: Partial<Components> = {
-  // @ts-expect-error
-  code: ({ node, inline, className, children, ...props }) => {
-    const content = String(children).replace(/\n$/, '');
-    const codeClassName = className || '';
-    
-    return (
-      <CodeBlock
-        node={node}
-        inline={!!inline}
-        className={codeClassName}
-        {...props}
-      >
-        {content}
-      </CodeBlock>
-    );
-  },
+  code: MarkdownCode,
   // Handle paragraphs, apply citation styling
   p: ({ children }) => {
     // Preserve existing logic for code blocks within paragraphs

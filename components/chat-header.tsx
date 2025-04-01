@@ -91,6 +91,7 @@ interface ChatHeaderProps {
   isLoading: boolean;
   isProcessingFile: boolean;
   onModelChange?: (modelId: string) => void;
+  isModelLoaded?: boolean;
 }
 
 function PureChatHeader({
@@ -101,6 +102,7 @@ function PureChatHeader({
   isLoading,
   isProcessingFile,
   onModelChange,
+  isModelLoaded = true,
 }: ChatHeaderProps) {
   const router = useRouter();
   const { open } = useSidebar();
@@ -117,7 +119,7 @@ function PureChatHeader({
           <TooltipTrigger asChild>
             <Button
               variant="outline"
-              className="order-2 md:order-1 md:px-2 px-2 md:h-fit ml-auto md:ml-0"
+              className="order-2 md:order-1 md:px-2 px-2 md:size-fit ml-auto md:ml-0"
               onClick={() => {
                 router.push('/');
                 router.refresh();
@@ -136,6 +138,8 @@ function PureChatHeader({
           selectedModelId={selectedModelId} 
           className="order-1 md:order-2"
           onModelChange={onModelChange}
+          chatId={chatId}
+          isLoaded={isModelLoaded}
         />
         <VisibilitySelector
           chatId={chatId}

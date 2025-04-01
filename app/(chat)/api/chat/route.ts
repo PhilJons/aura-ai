@@ -21,7 +21,7 @@ import {
   sanitizeResponseMessages,
 } from '@/lib/utils';
 import { emitDocumentContextUpdate } from '@/lib/utils/stream';
-import { generateTitleFromUserMessage } from '@/app/(chat)/actions';
+import { generateTitleFromUserMessage, getChatModelFromCookies } from '@/app/(chat)/actions';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getEncoding } from 'js-tiktoken';
 import { processDocument, } from '@/lib/azure/document';
@@ -102,6 +102,9 @@ export async function POST(request: Request) {
   const userEmail = session.user.email;
 
   try {
+    // Check the model from cookies for debugging
+    const cookieModel = await getChatModelFromCookies();
+    
     const {
       id,
       messages: initialMessages,
@@ -123,6 +126,13 @@ export async function POST(request: Request) {
     
     // Track which model is being used for this message with user email
     await trackModelUsed(id, selectedChatModel, userEmail || undefined);
+    
+    // Debug logging
+    console.log(`[MODEL COMPARISON] 
+      Cookie Model: ${cookieModel}
+      Selected Model (from request): ${selectedChatModel}
+      Chat Model (if exists): ${existingChat?.model || 'Not found (new chat)'}
+    `);
 
     const userMessage = getMostRecentUserMessage(initialMessages);
     if (!userMessage) {
@@ -375,7 +385,8 @@ export async function POST(request: Request) {
           id, 
           userId: session.user.id, 
           title,
-          visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private'
+          visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private',
+          model: selectedChatModel
         });
       } else {
         // Check if user has permission to modify this chat
@@ -386,9 +397,15 @@ export async function POST(request: Request) {
 
       return createDataStreamResponse({
         execute: (dataStream) => {
+          console.log(`[MODEL DEBUG] Using model for chat ${id}: ${selectedChatModel} (from request body)`);
+          console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
+          
+          const modelToUse = selectedChatModel;
+          console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
+          
           const result = streamText({
-            model: myProvider.languageModel(selectedChatModel),
-            system: systemPrompt({ selectedChatModel, isSearchEnabled }),
+            model: myProvider.languageModel(modelToUse),
+            system: systemPrompt({ selectedChatModel: modelToUse, isSearchEnabled }),
             messages: processedMessages,
             maxSteps: 5,
             experimental_activeTools: [
@@ -514,7 +531,8 @@ export async function POST(request: Request) {
         id, 
         userId: session.user.id, 
         title,
-        visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private'
+        visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private',
+        model: selectedChatModel
       });
     } else {
       // Check if user has permission to modify this chat
@@ -525,9 +543,15 @@ export async function POST(request: Request) {
 
     return createDataStreamResponse({
       execute: (dataStream) => {
+        console.log(`[MODEL DEBUG] Using model for chat ${id}: ${selectedChatModel} (from request body)`);
+        console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
+        
+        const modelToUse = selectedChatModel;
+        console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
+      
         const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, isSearchEnabled }),
+          model: myProvider.languageModel(modelToUse),
+          system: systemPrompt({ selectedChatModel: modelToUse, isSearchEnabled }),
           messages: processedMessages,
           maxSteps: 5,
           experimental_activeTools: [

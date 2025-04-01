@@ -126,7 +126,6 @@ export function SearchSection({
   return (
     <div className="max-w-2xl mx-auto w-full">
       <CollapsibleMessage
-        role="assistant"
         isCollapsible={true}
         header={header}
         isOpen={isOpen}
@@ -293,7 +292,6 @@ export function GroupedSearchSection({ invocations, chatId }: GroupedSearchSecti
     return (
       <div className="max-w-2xl mx-auto w-full">
         <CollapsibleMessage
-          role="assistant"
           isCollapsible={true}
           header={headerContent}
           isOpen={isOpen}

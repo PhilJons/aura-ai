@@ -31,21 +31,24 @@ export async function saveChat({
   id,
   userId,
   title,
-  visibility = 'private'
+  visibility = 'private',
+  model
 }: {
   id: string;
   userId: string;
   title: string;
   visibility?: 'private' | 'public';
+  model?: string;
 }): Promise<Chat> {
-  debug('db', 'Creating new chat', { chatId: id, userId, title, visibility });
+  debug('db', 'Creating new chat', { chatId: id, userId, title, visibility, model });
   const chat: Chat = {
     id,
     createdAt: new Date().toISOString(),
     title,
     userId,
     visibility,
-    type: 'chat'
+    type: 'chat',
+    model
   };
   const { resource } = await containers.chats.items.create(chat);
   debug('db', 'Chat created successfully', { chatId: id, title });

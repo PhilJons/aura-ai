@@ -36,7 +36,8 @@ export function Chat({
   const { mutate } = useSWRConfig();
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [isExistingChat, setIsExistingChat] = useState(false);
-  const [currentModel, setCurrentModel] = useState(selectedChatModel);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
   const router = useRouter();
   const { data: session } = useSession();
   const userEmail = session?.user?.email;
@@ -70,8 +71,11 @@ export function Chat({
   useEffect(() => {
     if (chat?.model) {
       setCurrentModel(chat.model);
+    } else {
+      setCurrentModel(selectedChatModel);
     }
-  }, [chat]);
+    setIsModelLoaded(true);
+  }, [chat, selectedChatModel]);
 
   // Fetch messages if not provided
   const { data: fetchedMessages } = useSWR(
@@ -145,7 +149,7 @@ export function Chat({
     reload,
   } = useChat({
     id,
-    body: { id, selectedChatModel: currentModel },
+    body: { id, selectedChatModel: currentModel || selectedChatModel },
     initialMessages: messagesToUse,
     experimental_throttle: 100,
     sendExtraMessageFields: true,
@@ -346,12 +350,13 @@ export function Chat({
     <div className="flex flex-col min-w-0 h-dvh bg-background">
       <ChatHeader
         chatId={id}
-        selectedModelId={currentModel}
+        selectedModelId={currentModel || selectedChatModel}
         selectedVisibilityType={chat?.visibility || selectedVisibilityType}
         isReadonly={actualReadonly}
         isLoading={isLoading}
         isProcessingFile={isProcessingFile}
         onModelChange={setCurrentModel}
+        isModelLoaded={isModelLoaded}
       />
 
       <Messages

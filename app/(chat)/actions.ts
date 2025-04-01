@@ -14,7 +14,7 @@ import { myProvider, chatModels, DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import { containers } from '@/lib/db/cosmos';
 import { trackModelChanged } from '@/lib/analytics';
 
-export async function saveChatModelAsCookie(model: string) {
+export async function saveChatModelAsCookie(model: string, chatId?: string) {
   // Validate that the model exists and is enabled
   const isValidModel = chatModels.some(m => m.id === model && m.enabled);
   const modelToSave = isValidModel ? model : DEFAULT_CHAT_MODEL;
@@ -29,10 +29,32 @@ export async function saveChatModelAsCookie(model: string) {
   // Only track if the model is actually changing
   if (previousModel !== modelToSave) {
     // We don't have a chatId here, so we'll use 'global' to indicate this is a global setting change
-    await trackModelChanged('global', previousModel, modelToSave, userEmail || undefined);
+    await trackModelChanged(chatId || 'global', previousModel, modelToSave, userEmail || undefined);
   }
   
   cookieStore.set('chat-model', modelToSave);
+  
+  // If a chatId is provided, also update the chat in the database
+  if (chatId) {
+    try {
+      // Find the chat
+      const { resources: [chat] } = await containers.chats.items
+        .query({
+          query: "SELECT * FROM c WHERE c.id = @id",
+          parameters: [{ name: "@id", value: chatId }]
+        })
+        .fetchAll();
+      
+      if (chat) {
+        // Update the chat's model
+        chat.model = modelToSave;
+        await containers.chats.items.upsert(chat);
+      }
+    } catch (error) {
+      console.error('Error updating chat model in database:', error);
+      // Don't throw - we still want to set the cookie even if DB update fails
+    }
+  }
 }
 
 export async function generateTitleFromUserMessage({
@@ -74,6 +96,13 @@ export async function updateChatVisibility({
   visibility: VisibilityType;
 }) {
   await updateChatVisiblityById({ chatId, visibility });
+}
+
+export async function getChatModelFromCookies() {
+  const cookieStore = await cookies();
+  const model = cookieStore.get('chat-model')?.value || DEFAULT_CHAT_MODEL;
+  console.log(`[COOKIE DEBUG] Current chat model from cookies: ${model}`);
+  return model;
 }
 
 export async function clearChatCookies() {

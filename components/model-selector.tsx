@@ -21,9 +21,13 @@ export function ModelSelector({
   selectedModelId,
   className,
   onModelChange,
+  chatId,
+  isLoaded = true,
 }: {
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
+  chatId?: string;
+  isLoaded?: boolean;
 } & React.ComponentProps<typeof Button>) {
   const [open, setOpen] = useState(false);
   const [optimisticModelId, setOptimisticModelId] =
@@ -35,6 +39,15 @@ export function ModelSelector({
     () => chatModels.find((chatModel) => chatModel.id === optimisticModelId),
     [optimisticModelId],
   );
+
+  // Show a skeleton loader while model is loading
+  if (!isLoaded) {
+    return (
+      <Button variant="outline" className={cn("md:px-2 md:h-[34px] min-w-[110px]", className)} disabled>
+        <div className="w-full h-4 bg-muted animate-pulse rounded" />
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -65,7 +78,7 @@ export function ModelSelector({
                   if (onModelChange) {
                     onModelChange(id);
                   }
-                  saveChatModelAsCookie(id).then(() => {
+                  saveChatModelAsCookie(id, chatId).then(() => {
                     // Dispatch a custom event to notify that cookies have changed
                     window.dispatchEvent(new Event('cookie-change'));
                   });

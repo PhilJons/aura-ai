@@ -16,6 +16,7 @@ export interface Chat {
   userId: string;
   visibility: 'public' | 'private';
   type: 'chat';
+  model?: string;
 }
 
 export type MessageRole = 'system' | 'user' | 'assistant' | 'data' | 'tool';
