@@ -31,6 +31,7 @@ import { useDirectFileUpload } from "@/components/ui/direct-file-upload";
 import { UploadProgress } from "@/components/upload-progress";
 import { trackFileUploaded } from '@/lib/analytics';
 import { trackClientMessageSent, trackClientFileUploaded } from '@/lib/client-analytics';
+import { extendHeartbeatTimeout } from '@/lib/utils/stream';
 import { SearchToggle } from '@/components/search-toggle';
 
 // Icons
@@ -253,12 +254,17 @@ function PureMultimodalInput({
             );
           }
         }
+        
+        // Extend the heartbeat timeout to ensure it stays active until message submission
+        extendHeartbeatTimeout(chatId);
       }
-      setIsProcessingFile(false);
+      // We're keeping the processing state active until message submission
+      // This ensures the heartbeat continues until the user sends the message
       setUploadQueue((prev) => prev.slice(1));
     },
     onUploadError: (error) => {
       console.error("Upload error", error);
+      // Only set processing file to false on actual errors
       setIsProcessingFile(false);
       setUploadQueue((prev) => prev.slice(1));
     },
@@ -345,6 +351,12 @@ function PureMultimodalInput({
       return attachment;
     });
 
+    // If we have attachments, extend the heartbeat timeout one more time
+    // This ensures the heartbeat stays active during message processing
+    if (attachments.length > 0) {
+      extendHeartbeatTimeout(chatId);
+    }
+
     handleSubmit(undefined, {
       experimental_attachments: processedAttachments,
     });
@@ -353,11 +365,14 @@ function PureMultimodalInput({
     setAttachments([]);
     setLocalStorageAttachments([]);
     setLocalStorageInput("");
+    
+    // Set processing file to false after submission
+    setIsProcessingFile(false);
 
     if (width && width > 768) {
       textareaRef.current?.focus();
     }
-  }, [attachments, handleSubmit, setAttachments, setLocalStorageAttachments, setLocalStorageInput, width, chatId, input, userEmail]);
+  }, [attachments, handleSubmit, setAttachments, setLocalStorageAttachments, setLocalStorageInput, width, chatId, input, userEmail, setIsProcessingFile]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();

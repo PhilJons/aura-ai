@@ -248,9 +248,9 @@ export async function POST(request: Request) {
         }
       }
 
-      // Mark upload complete
-      markFileUploadComplete(chatId);
-      logger.upload.debug('Marked file upload as complete', { chatId });
+      // Remove this line to keep heartbeat active
+      // markFileUploadComplete(chatId);
+      logger.upload.debug('Keeping file upload active for chat submission', { chatId });
 
       logger.upload.info('File processing completed successfully', {
         blobName,
@@ -264,7 +264,7 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       // Make sure to mark upload complete even on error
-      markFileUploadComplete(chatId);
+      // markFileUploadComplete(chatId);
       logger.upload.debug('Marked file upload as complete (after error)', { chatId });
       
       logger.upload.error('Error processing file', {

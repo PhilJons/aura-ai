@@ -114,9 +114,6 @@ export async function POST(request: Request) {
       // Race the upload against the timeout
       const attachments = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
-      // Mark upload complete
-      markFileUploadComplete(chatId);
-
       logger.upload.info('File upload completed successfully', {
         filename: file.name,
         attachmentCount: attachments.length,
@@ -127,9 +124,6 @@ export async function POST(request: Request) {
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (error) {
-      // Make sure to mark upload complete even on error
-      markFileUploadComplete(chatId);
-      
       // Enhanced error logging
       logger.upload.error('Error during file processing', {
         error: error instanceof Error ? error.message : 'Unknown error',

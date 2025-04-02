@@ -198,6 +198,10 @@ export function Chat({
           markFileUploadComplete(id);
           eventSource.close();
         }, 10000);
+      } else {
+        // If no attachments, make sure any previous file upload is properly marked as complete
+        // This ensures heartbeats are stopped after the message completes
+        markFileUploadComplete(id);
       }
     },
     onError: (error) => {
@@ -297,7 +301,9 @@ export function Chat({
         });
         console.error("Error sending message:", err);
         toast.error("Failed to send message. Please try again.");
+        // Mark processing as complete in case of error
         markFileUploadComplete(id);
+        setIsProcessingFile(false);
       }
     } else {
       try {

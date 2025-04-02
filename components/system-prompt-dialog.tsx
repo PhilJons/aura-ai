@@ -401,7 +401,7 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
     }
 
     let pollCount = 0;
-    const maxPolls = 20;
+    const maxPolls = 60; // Increased from 20 to 60 (30 seconds at 500ms interval)
     const pollInterval = 500;
     let pollTimer: NodeJS.Timeout | null = null;
 
@@ -411,15 +411,28 @@ export function SystemPromptDialog({ chatId, isProcessingFile = false }: SystemP
       setHasStartedPolling(true);
       const hasDocuments = await fetchSystemContent();
       
-      if (hasDocuments || pollCount >= maxPolls) {
-        console.log('Polling complete:', { hasDocuments, pollCount });
+      if (hasDocuments) {
+        console.log('Documents found, stopping polling');
         setIsInitialPolling(false);
         if (pollTimer) clearTimeout(pollTimer);
         return;
       }
-
-      pollCount++;
-      pollTimer = setTimeout(pollForDocuments, pollInterval);
+      
+      // Continue polling if we haven't reached the max count
+      if (pollCount < maxPolls) {
+        pollCount++;
+        pollTimer = setTimeout(pollForDocuments, pollInterval);
+      } else {
+        console.log('Max polls reached, stopping polling');
+        setIsInitialPolling(false);
+        
+        // After reaching max polls, try one final fetch after a longer delay
+        // This helps in case processing takes longer than expected
+        setTimeout(async () => {
+          console.log('Final fetch attempt after max polls');
+          await fetchSystemContent();
+        }, 5000); // 5 second final delay
+      }
     }
 
     // Start polling

@@ -1,5 +1,6 @@
 const streamControllers = new Map<string, Set<ReadableStreamDefaultController>>();
 const heartbeatIntervals = new Map<string, NodeJS.Timeout>();
+const heartbeatTimeouts = new Map<string, NodeJS.Timeout>();
 const fileUploadsInProgress = new Set<string>();
 
 export function addStreamController(chatId: string, controller: ReadableStreamDefaultController) {
@@ -26,32 +27,65 @@ export function removeStreamController(chatId: string, controller: ReadableStrea
 function startHeartbeat(chatId: string) {
   stopHeartbeat(chatId); // Clear existing first
   
+  console.log(`Starting heartbeat for chat ${chatId}`);
+  
   const interval = setInterval(() => {
     sendHeartbeat(chatId);
   }, 1000);
 
-  // Auto-stop after 30s max duration
-  setTimeout(() => {
+  // Auto-stop after 120s max duration (2 minutes) to prevent indefinite heartbeats
+  const timeout = setTimeout(() => {
+    console.log(`Heartbeat timeout reached for chat ${chatId}`);
     stopHeartbeat(chatId);
-  }, 30000);
+  }, 120000); // 2 minutes
 
   heartbeatIntervals.set(chatId, interval);
+  heartbeatTimeouts.set(chatId, timeout);
 }
 
 function stopHeartbeat(chatId: string) {
+  console.log(`Stopping heartbeat for chat ${chatId}`);
+  
   const interval = heartbeatIntervals.get(chatId);
   if (interval) {
     clearInterval(interval);
     heartbeatIntervals.delete(chatId);
   }
+  
+  const timeout = heartbeatTimeouts.get(chatId);
+  if (timeout) {
+    clearTimeout(timeout);
+    heartbeatTimeouts.delete(chatId);
+  }
+}
+
+// Extend the current heartbeat timeout for a chat
+export function extendHeartbeatTimeout(chatId: string) {
+  console.log(`Extending heartbeat timeout for chat ${chatId}`);
+  
+  // Clear existing timeout
+  const existingTimeout = heartbeatTimeouts.get(chatId);
+  if (existingTimeout) {
+    clearTimeout(existingTimeout);
+  }
+  
+  // Set a new timeout
+  const newTimeout = setTimeout(() => {
+    console.log(`Extended heartbeat timeout reached for chat ${chatId}`);
+    stopHeartbeat(chatId);
+  }, 120000); // 2 minutes
+  
+  heartbeatTimeouts.set(chatId, newTimeout);
 }
 
 export function markFileUploadStarted(chatId: string) {
+  console.log(`Marking file upload started for chat ${chatId}`);
   fileUploadsInProgress.add(chatId);
   startHeartbeat(chatId);
 }
 
 export function markFileUploadComplete(chatId: string) {
+  console.log(`Marking file upload complete for chat ${chatId}`);
   fileUploadsInProgress.delete(chatId);
   stopHeartbeat(chatId);
 }
@@ -97,7 +131,7 @@ export async function emitDocumentContextUpdate(chatId: string, hasImages = fals
         }
       }
     }
-    stopHeartbeat(chatId);
+    // Don't stop the heartbeat here - it will be explicitly stopped by markFileUploadComplete
   }, 2000);
 }
 

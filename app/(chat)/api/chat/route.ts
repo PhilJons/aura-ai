@@ -156,7 +156,7 @@ export async function POST(request: Request) {
 
     // Get existing system messages from the conversation
     const existingSystemMessages = requestBody.messages.filter(
-      (msg: { role: string; content: unknown }) => msg.role === 'system' && 
+      msg => msg.role === 'system' && 
       typeof msg.content === 'string' && 
       msg.content.startsWith('Document Intelligence Analysis:')
     );
@@ -306,7 +306,7 @@ export async function POST(request: Request) {
 
       // Create system messages for each valid content
       const newSystemMessages: DBMessage[] = [];
-      let totalTokens = countTokens(existingSystemMessages.map((msg: { content: string }) => msg.content).join('\n'));
+      let totalTokens = countTokens(existingSystemMessages.map(msg => msg.content).join('\n'));
 
       for (const content of validContents) {
         const message = createSystemMessage(content, requestBody.id);
@@ -347,17 +347,17 @@ export async function POST(request: Request) {
 
       // Combine existing system messages with new ones and prepare for OpenAI
       processedMessages = [
-        ...existingSystemMessages.map((msg: { id: string; role: string; content: string }) => ({
+        ...existingSystemMessages.map(msg => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
         })),
-        ...newSystemMessages.map((msg: DBMessage) => ({
+        ...newSystemMessages.map(msg => ({
           id: msg.id,
           role: msg.role as AIMessage['role'],
           content: msg.content
         })),
-        ...requestBody.messages.filter((msg: { role: string; id: string }) => msg.role !== 'system' && msg.id !== userMessage.id).map((msg: { id: string; role: string; content: unknown }) => ({
+        ...requestBody.messages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
@@ -368,10 +368,10 @@ export async function POST(request: Request) {
       // Debug logging for message processing
       console.log('[DEBUG] [chat] Processing messages:', {
         totalMessages: processedMessages.length,
-        systemMessages: processedMessages.filter((msg: { role: string }) => msg.role === 'system').length,
+        systemMessages: processedMessages.filter(msg => msg.role === 'system').length,
         systemMessageSummary: processedMessages
-          .filter((msg: { role: string }) => msg.role === 'system')
-          .map((msg: { id: string; content: unknown }) => ({
+          .filter(msg => msg.role === 'system')
+          .map(msg => ({
             id: msg.id,
             contentPreview: typeof msg.content === 'string' 
               ? `${msg.content.substring(0, 100)}...` 
@@ -397,100 +397,37 @@ export async function POST(request: Request) {
         }
       }
 
+      // Now process the message with attachments
+      const { completion } = await myProvider.chat({
+        messages: processedMessages.map(msg => ({ role: msg.role, content: msg.content })),
+        systemPrompt: systemPrompt(chatModelFromRequest),
+        body: {
+          chatId: requestBody.id,
+          selectedChatModel: chatModelFromRequest,
+          isSearchEnabled,
+          tools: isSearchEnabled ? [searchTool] : undefined,
+        }
+      });
+
+      // After handling a chat message with attachments, emit an update
+      // to refresh the document context
+      if (attachments && attachments.length > 0) {
+        const hasImages = attachments.some(att => 
+          att.contentType?.startsWith('image/') || 
+          (typeof att.contentType === 'string' && att.contentType.includes('image'))
+        );
+        
+        // Emit after a short delay to ensure any document processing has completed
+        setTimeout(() => {
+          console.log('Emitting document context update after message with attachments');
+          emitDocumentContextUpdate(requestBody.id, hasImages);
+        }, 2000);
+      }
+
+      // Create response stream
       return createDataStreamResponse({
-        execute: (dataStream) => {
-          console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${chatModelFromRequest} (from request body)`);
-          console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
-          
-          const modelToUse = chatModelFromRequest;
-          console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
-          
-          const result = streamText({
-            model: myProvider.languageModel(modelToUse),
-            system: systemPrompt({ selectedChatModel: modelToUse, isSearchEnabled }),
-            messages: processedMessages,
-            maxSteps: 5,
-            experimental_activeTools: [
-              // 'getWeather',
-              'requestSuggestions',
-              ...(isSearchEnabled ? ['search' as const] : []),
-            ],
-            experimental_transform: smoothStream({ chunking: 'word' }),
-            experimental_generateMessageId: generateUUID,
-            tools: {
-              // getWeather,
-              requestSuggestions: requestSuggestions({
-                session,
-                dataStream,
-              }),
-              ...(isSearchEnabled ? { search: searchTool } : {}),
-            },
-            onFinish: async ({ response, reasoning }) => {
-              if (session.user?.id) {
-                try {
-                  const sanitizedResponseMessages = sanitizeResponseMessages({
-                    messages: response.messages,
-                    reasoning,
-                  });
-
-                  const savedMessages = await saveMessages({
-                    messages: sanitizedResponseMessages.map((message) => {
-                      return {
-                        id: generateUUID(),
-                        chatId: requestBody.id,
-                        role: message.role,
-                        content: message.content,
-                        createdAt: new Date().toISOString(),
-                        type: 'message'
-                      };
-                    }),
-                  });
-
-                  dataStream.writeData({
-                    type: 'completion',
-                    content: JSON.stringify({
-                      messages: savedMessages
-                    })
-                  });
-
-                  // Track the assistant message
-                  if (savedMessages.length > 0) {
-                    const assistantMessage = savedMessages.find(msg => msg.role === 'assistant');
-                    if (assistantMessage) {
-                      await trackMessageSent(
-                        requestBody.id,
-                        'assistant',
-                        assistantMessage.content.length,
-                        userEmail || undefined
-                      );
-                    }
-                  }
-                } catch (error) {
-                  console.error('Failed to save chat');
-                }
-              }
-            },
-            experimental_telemetry: {
-              isEnabled: true,
-              functionId: 'stream-text',
-            },
-          });
-
-          result.mergeIntoDataStream(dataStream, {
-            sendReasoning: true,
-          });
-        },
-        onError: (error: unknown) => {
-          console.error('Error in chat stream:', error);
-          if (error instanceof Error) {
-            const match = error.message.match(/rate_limit_exceeded:(\d+)/);
-            if (match) {
-              const retryAfter = Number.parseInt(match[1]);
-              return `Rate limit exceeded. Please try again in ${retryAfter} seconds.`;
-            }
-          }
-          return 'Oops, an error occurred!';
-        },
+        data: smoothStream(completion),
+        initialData: { chatId: requestBody.id }
       });
     } else {
       // If no attachments, just save the user message and keep existing system messages
@@ -507,12 +444,12 @@ export async function POST(request: Request) {
 
       // Keep existing system messages and strip attachments from all messages
       processedMessages = [
-        ...existingSystemMessages.map((msg: { id: string; role: string; content: string }) => ({
+        ...existingSystemMessages.map(msg => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
         })),
-        ...requestBody.messages.filter((msg: { role: string; id: string }) => msg.role !== 'system' && msg.id !== userMessage.id).map((msg: { id: string; role: string; content: unknown }) => ({
+        ...requestBody.messages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
