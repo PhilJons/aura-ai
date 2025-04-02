@@ -1,91 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
 import { logger } from "@/lib/utils/logger";
-import { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol } from "@azure/storage-blob";
+import { generateSasUrl } from '@/lib/azure/blob';
 
 export const maxDuration = 10; // 10 seconds should be plenty for generating a SAS URL
-
-// Function to generate a SAS URL for a blob
-function generateSasUrl(blobName: string): string {
-  logger.blob.debug('Generating SAS URL', { 
-    blobName,
-    timestamp: new Date().toISOString()
-  });
-  
-  const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
-  if (!connectionString) {
-    throw new Error('Storage connection string is not configured');
-  }
-  
-  const blobServiceClient = BlobServiceClient.fromConnectionString(
-    connectionString
-  );
-  
-  const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
-  if (!containerName) {
-    throw new Error('Storage container name is not configured');
-  }
-  
-  const containerClient = blobServiceClient.getContainerClient(
-    containerName
-  );
-  
-  const blobClient = containerClient.getBlobClient(blobName);
-  
-  // Create a SAS token that's valid for 24 hours
-  const startsOn = new Date();
-  const expiresOn = new Date(startsOn);
-  expiresOn.setDate(startsOn.getDate() + 1);
-
-  // Extract account name and key from connection string
-  const accountName = connectionString.match(/AccountName=([^;]+)/)?.[1] || '';
-  const accountKey = connectionString.match(/AccountKey=([^;]+)/)?.[1] || '';
-  
-  if (!accountName || !accountKey) {
-    throw new Error('Could not extract account name or key from connection string');
-  }
-  
-  const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
-
-  const sasOptions = {
-    containerName: containerClient.containerName,
-    blobName: blobName,
-    permissions: BlobSASPermissions.parse("r"), // Read only
-    startsOn: startsOn,
-    expiresOn: expiresOn,
-    protocol: SASProtocol.Https
-  };
-
-  logger.blob.debug('SAS options prepared', {
-    containerName: sasOptions.containerName,
-    blobName: sasOptions.blobName,
-    permissions: 'read',
-    expiresOn: sasOptions.expiresOn.toISOString(),
-    timestamp: new Date().toISOString()
-  });
-
-  try {
-    const sasToken = generateBlobSASQueryParameters(
-      sasOptions,
-      sharedKeyCredential
-    ).toString();
-    
-    const url = `${blobClient.url}?${sasToken}`;
-    logger.blob.debug('SAS URL generated successfully', {
-      blobName,
-      urlLength: url.length,
-      timestamp: new Date().toISOString()
-    });
-    
-    return url;
-  } catch (error) {
-    logger.blob.error('Failed to generate SAS URL', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      blobName,
-      timestamp: new Date().toISOString()
-    });
-    throw error;
-  }
-}
 
 export async function POST(request: Request) {
   logger.document.debug('PDF URL generation route called', {
@@ -121,48 +38,41 @@ export async function POST(request: Request) {
       });
     }
 
+    // Check if blobName is URL encoded and decode it if needed
+    const decodedBlobName = blobName.includes('%') ? decodeURIComponent(blobName) : blobName;
+    
     logger.document.info('Generating SAS URL for PDF', {
-      blobName,
+      blobName: decodedBlobName,
       userId: session.user.id,
       environment: process.env.VERCEL_ENV || 'local',
       timestamp: new Date().toISOString()
     });
 
-    if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
-      return Response.json({ error: 'Storage connection string is not configured' }, { status: 500 });
+    // Generate a SAS URL for the blob using the shared implementation
+    try {
+      const sasUrl = generateSasUrl(decodedBlobName);
+      
+      logger.document.debug('SAS URL generated successfully', {
+        blobName: decodedBlobName,
+        sasUrl: `${sasUrl.substring(0, 50)}...`
+      });
+
+      return new Response(JSON.stringify({
+        sasUrl
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (sasError) {
+      logger.document.error('Error in SAS URL generation', {
+        error: sasError instanceof Error ? sasError.message : 'Unknown error',
+        errorName: sasError instanceof Error ? sasError.name : 'Unknown',
+        errorStack: sasError instanceof Error ? sasError.stack : 'No stack trace',
+        blobName: decodedBlobName,
+        timestamp: new Date().toISOString()
+      });
+      
+      throw sasError;
     }
-
-    const blobServiceClient = BlobServiceClient.fromConnectionString(
-      process.env.AZURE_STORAGE_CONNECTION_STRING
-    );
-    
-    if (!process.env.AZURE_STORAGE_CONTAINER_NAME) {
-      return Response.json({ error: 'Storage container name is not configured' }, { status: 500 });
-    }
-
-    const containerClient = blobServiceClient.getContainerClient(
-      process.env.AZURE_STORAGE_CONTAINER_NAME
-    );
-
-    // Extract account name and key from connection string
-    const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
-    if (!connectionString) {
-      return Response.json({ error: 'Storage connection string is not configured' }, { status: 500 });
-    }
-
-    // Generate a SAS URL for the blob
-    const sasUrl = generateSasUrl(blobName);
-    
-    logger.document.debug('SAS URL generated successfully', {
-      blobName,
-      sasUrl: `${sasUrl.substring(0, 50)}...`
-    });
-
-    return new Response(JSON.stringify({
-      sasUrl
-    }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
   } catch (error) {
     logger.document.error('Error generating PDF SAS URL', {
       error: error instanceof Error ? error.message : 'Unknown error',

@@ -38,22 +38,40 @@ const createModel = (modelName: string) => {
     apiVersion: '2024-08-01-preview',
   };
 
-  if (modelName === 'gpt-4o' || modelName === 'gpt-4o-mini') {
+  if (modelName === 'gpt-4o' || modelName === 'gpt-4o-mini' || modelName === 'o3-mini') {
     // Map internal model names to specific Azure deployments
     // Both use the same API version (2024-08-01-preview) but different deployments:
-    // gpt-4o → gpt-4o-EU-30k deployment
+    // gpt-4o → gpt-4o deployment
     // gpt-4o-mini → gpt-4o-mini deployment
-    const deploymentName = modelName === 'gpt-4o' ? 'gpt-4o-EU-30k' : 'gpt-4o-mini';
+    // o3-mini → o3-mini deployment
+    const deploymentName = 
+      modelName === 'gpt-4o' ? 'gpt-4o' :
+      modelName === 'o3-mini' ? 'o3-mini' : 'gpt-4o-mini';
     
     // Log deployment information
     console.log(`[Azure OpenAI] Using model: ${modelName} with deployment: ${deploymentName}`);
-    console.log(`[Azure OpenAI] Full endpoint: https://${process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME}.openai.azure.com/openai/deployments/${deploymentName}/chat/completions?api-version=${baseConfig.apiVersion}`);
     
-    const provider = createAzure({
-      ...baseConfig,
-      resourceName: process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME,
-    });
-    return provider.chat(deploymentName);
+    if (modelName === 'gpt-4o' || modelName === 'o3-mini') {
+      // Use the specific URL for GPT-4o and o3-mini
+      const apiVersion = '2025-01-01-preview';
+      console.log(`[Azure OpenAI] Full endpoint: https://auraaiazfoundr8926783027.cognitiveservices.azure.com/openai/deployments/${deploymentName}/chat/completions?api-version=${apiVersion}`);
+      
+      const provider = createAzure({
+        ...baseConfig,
+        resourceName: 'auraaiazfoundr8926783027',
+        apiVersion: apiVersion,
+      });
+      return provider.chat(deploymentName);
+    } else {
+      // For GPT-4o mini, use the standard approach
+      console.log(`[Azure OpenAI] Full endpoint: https://${process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME}.openai.azure.com/openai/deployments/${deploymentName}/chat/completions?api-version=${baseConfig.apiVersion}`);
+      
+      const provider = createAzure({
+        ...baseConfig,
+        resourceName: process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME,
+      });
+      return provider.chat(deploymentName);
+    }
   } else {
     // For DeepSeek and Llama, use Azure AI endpoint
     const deploymentMap: { [key: string]: string } = {
@@ -95,6 +113,7 @@ const createModelWithLogging = (displayName: string, modelName: string) => {
 // Create all models using the chat interface with logging
 const gpt4o = createModelWithLogging('GPT-4o', 'gpt-4o');
 const gpt4omini = createModelWithLogging('GPT-4o mini', 'gpt-4o-mini');
+const o3mini = createModelWithLogging('GPT o3-mini', 'o3-mini');
 const deepseek = createModelWithLogging('DeepSeek', 'deepseek');
 const llama = createModelWithLogging('Llama', 'llama');
 
@@ -124,6 +143,7 @@ export const myProvider = customProvider({
   languageModels: {
     'chat-model-small': gpt4omini,
     'chat-model-large': gpt4o,
+    'chat-model-o3-mini': o3mini,
     'chat-model-reasoning': deepseek,
     'chat-model-advanced': llama,
     'title-model': gpt4o,
@@ -155,6 +175,12 @@ export const chatModels: Array<ChatModel> = [
     id: 'chat-model-large',
     name: 'GPT-4o',
     description: 'Most capable model for complex tasks',
+    enabled: true,
+  },
+  {
+    id: 'chat-model-o3-mini',
+    name: 'GPT o3-mini',
+    description: 'New optimized model for efficient performance',
     enabled: true,
   },
   {

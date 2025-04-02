@@ -1,4 +1,4 @@
-import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol } from '@azure/storage-blob';
+import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol, StorageSharedKeyCredential } from '@azure/storage-blob';
 import { logger } from '@/lib/utils/logger';
 
 if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
@@ -54,8 +54,19 @@ export function generateSasUrl(blobName: string): string {
   });
 
   try {
-    // @ts-ignore - The types are incorrect, but this works
-    const sasToken = generateBlobSASQueryParameters(sasOptions, blobServiceClient.credential).toString();
+    // Fix for credential handling with proper type checking
+    const credential = blobServiceClient.credential;
+    if (!credential || !('accountName' in credential && 'accountKey' in credential)) {
+      throw new Error('No valid shared key credential found for generating SAS token');
+    }
+    
+    // Now we're sure it's a StorageSharedKeyCredential
+    const sharedKeyCredential = credential as StorageSharedKeyCredential;
+    
+    const sasToken = generateBlobSASQueryParameters(
+      sasOptions, 
+      sharedKeyCredential
+    ).toString();
     
     const url = `${blobClient.url}?${sasToken}`;
     logger.blob.debug('SAS URL generated successfully', {
@@ -109,8 +120,19 @@ export async function generateSasToken(blobName: string, contentType: string) {
       timestamp: new Date().toISOString()
     });
 
-    // @ts-ignore - The types are incorrect, but this works
-    const sasToken = generateBlobSASQueryParameters(sasOptions, blobServiceClient.credential).toString();
+    // Fix for credential handling with proper type checking
+    const credential = blobServiceClient.credential;
+    if (!credential || !('accountName' in credential && 'accountKey' in credential)) {
+      throw new Error('No valid shared key credential found for generating SAS token');
+    }
+    
+    // Now we're sure it's a StorageSharedKeyCredential
+    const sharedKeyCredential = credential as StorageSharedKeyCredential;
+    
+    const sasToken = generateBlobSASQueryParameters(
+      sasOptions, 
+      sharedKeyCredential
+    ).toString();
     
     const sasUrl = `${blobClient.url}?${sasToken}`;
     const blobUrl = generateSasUrl(blobName); // This generates a read-only SAS URL

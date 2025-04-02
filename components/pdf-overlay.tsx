@@ -49,9 +49,18 @@ export function PdfOverlay({
         try {
           setIsLoadingSas(true);
           
-          // Extract the blob name from the URL
-          const blobNameMatch = pdfUrl.match(/\/([^/?]+)(?:\?|$)/);
+          // Extract the blob name from the URL - improved regex pattern
+          // The original regex only works for simple URLs without query params
+          // This improved version extracts the last path segment before any query params
+          const originalUrl = pdfUrl;
+          const blobNameMatch = originalUrl.match(/\/([^/?#]+)(?:[?#]|$)/);
           const blobName = blobNameMatch ? blobNameMatch[1] : null;
+          
+          logger.document.debug('Attempting to extract blob name', {
+            pdfUrl: originalUrl,
+            blobNameMatch: blobNameMatch ? JSON.stringify(blobNameMatch) : 'No match',
+            extractedBlobName: blobName || 'Failed to extract'
+          });
           
           if (!blobName) {
             throw new Error("Could not extract blob name from PDF URL");
@@ -59,7 +68,7 @@ export function PdfOverlay({
           
           logger.document.debug('Requesting fresh SAS URL for PDF overlay', {
             blobName,
-            pdfUrl
+            pdfUrl: originalUrl
           });
           
           const response = await fetch('/api/files/pdf-url', {
@@ -71,16 +80,25 @@ export function PdfOverlay({
           });
           
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || response.statusText);
+            const errorText = await response.text();
+            logger.document.error('Failed to get SAS URL from API', {
+              status: response.status,
+              statusText: response.statusText,
+              responseText: errorText
+            });
+            throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`);
           }
           
           const data = await response.json();
           
           logger.document.debug('Received fresh SAS URL for PDF overlay', {
             blobName,
-            sasUrl: `${data.sasUrl.substring(0, 50)}...`
+            sasUrl: data.sasUrl ? `${data.sasUrl.substring(0, 50)}...` : 'No URL returned'
           });
+          
+          if (!data.sasUrl) {
+            throw new Error('No SAS URL returned from API');
+          }
           
           setSasUrl(data.sasUrl);
         } catch (error) {
@@ -157,9 +175,18 @@ export function PdfOverlay({
               onLoad={handleLoad}
               onError={handleError}
             >
-              <p className="p-4 text-foreground dark:text-zinc-300">
-                PDF preview is not available in this browser.
-              </p>
+              <div className="flex flex-col items-center justify-center p-4 w-full h-full">
+                <p className="mb-4 text-foreground dark:text-zinc-300">
+                  PDF preview is not available in this browser.
+                </p>
+                <Button 
+                  variant="outline" 
+                  onClick={() => window.open(sasUrl, '_blank')}
+                  className="mt-2"
+                >
+                  Open PDF in new tab
+                </Button>
+              </div>
             </object>
           ) : (
             <div className="flex items-center justify-center size-full">

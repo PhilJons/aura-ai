@@ -32,7 +32,7 @@ function PureSuggestedActions({ chatId, append }: SuggestedActionsProps) {
     },
     {
       title: 'Help me brainstorm',
-      label: 'ideas for my next clientproject',
+      label: 'ideas for my next client project',
       action: 'Help me brainstorm ideas for my next client project, ask me questions to gather more information before we continue.',
     },
   ];
@@ -58,10 +58,10 @@ function PureSuggestedActions({ chatId, append }: SuggestedActionsProps) {
                 content: suggestedAction.action,
               });
             }}
-            className="text-left border rounded-xl px-4 py-3.5 text-sm flex-1 gap-1 sm:flex-col w-full h-auto justify-start items-start"
+            className="text-left border rounded-xl px-4 py-3.5 text-sm flex flex-col w-full h-auto min-h-[90px] justify-start items-start overflow-hidden"
           >
-            <span className="font-medium">{suggestedAction.title}</span>
-            <span className="text-muted-foreground">
+            <span className="font-medium w-full break-words">{suggestedAction.title}</span>
+            <span className="text-muted-foreground w-full break-words">
               {suggestedAction.label}
             </span>
           </Button>

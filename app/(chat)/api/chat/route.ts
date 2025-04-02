@@ -6,7 +6,7 @@ import {
   streamText,
 } from 'ai';
 import { auth } from '@/app/auth';
-import { myProvider } from '@/lib/ai/models';
+import { myProvider, DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import { systemPrompt } from '@/lib/ai/prompts';
 import {
   deleteChatById,
@@ -102,46 +102,48 @@ export async function POST(request: Request) {
   const userEmail = session.user.email;
 
   try {
-    // Check the model from cookies for debugging
-    const cookieModel = await getChatModelFromCookies();
-    
-    const {
-      id,
-      messages: initialMessages,
-      selectedChatModel,
-    }: { id: string; messages: Array<AIMessage>; selectedChatModel: string } =
-      await request.json();
+    const requestBody = await request.json();
 
     // Get the search-enabled state from the cookie
-    const isSearchEnabled = request.headers.get('x-search-enabled') === 'true';
+    const searchEnabledHeader = request.headers.get('x-search-enabled') === 'true';
+    
+    // Get the selected chat model from the request body or use the default
+    const chatModelFromRequest = requestBody.model || DEFAULT_CHAT_MODEL;
+    
+    // Check if web search should be enabled for this model
+    // Add o3-mini to the list of models that support web browsing
+    const modelsWithSearchEnabled = ['chat-model-large', 'chat-model-small', 'chat-model-o3-mini'];
+    const isSearchEnabled = searchEnabledHeader && modelsWithSearchEnabled.includes(chatModelFromRequest);
+    
+    console.log(`[Search Debug] Model: ${chatModelFromRequest}, Search enabled: ${isSearchEnabled}`);
 
     // Check if this is a new chat
-    const existingChat = await getChatById({ id });
+    const existingChat = await getChatById({ id: requestBody.id });
     const isNewChat = !existingChat;
     
     if (isNewChat) {
       // Track new chat creation with user email
-      await trackChatCreated(id, userEmail || undefined);
+      await trackChatCreated(requestBody.id, userEmail || undefined);
     }
     
     // Track which model is being used for this message with user email
-    await trackModelUsed(id, selectedChatModel, userEmail || undefined);
+    await trackModelUsed(requestBody.id, chatModelFromRequest, userEmail || undefined);
     
     // Debug logging
     console.log(`[MODEL COMPARISON] 
-      Cookie Model: ${cookieModel}
-      Selected Model (from request): ${selectedChatModel}
+      Cookie Model: ${chatModelFromRequest}
+      Selected Model (from request): ${chatModelFromRequest}
       Chat Model (if exists): ${existingChat?.model || 'Not found (new chat)'}
     `);
 
-    const userMessage = getMostRecentUserMessage(initialMessages);
+    const userMessage = getMostRecentUserMessage(requestBody.messages);
     if (!userMessage) {
       return new Response('No user message found', { status: 400 });
     }
 
     // Track the user message being sent with user email
     await trackMessageSent(
-      id, 
+      requestBody.id, 
       'user', 
       typeof userMessage.content === 'string' 
         ? userMessage.content.length 
@@ -150,10 +152,10 @@ export async function POST(request: Request) {
     );
 
     const attachments = userMessage.experimental_attachments;
-    let processedMessages = [...initialMessages];
+    let processedMessages = [...requestBody.messages];
 
     // Get existing system messages from the conversation
-    const existingSystemMessages = initialMessages.filter(
+    const existingSystemMessages = requestBody.messages.filter(
       msg => msg.role === 'system' && 
       typeof msg.content === 'string' && 
       msg.content.startsWith('Document Intelligence Analysis:')
@@ -161,7 +163,7 @@ export async function POST(request: Request) {
 
     if (attachments?.length) {
       // Mark file upload started
-      await emitDocumentContextUpdate(id);
+      await emitDocumentContextUpdate(requestBody.id);
 
       // Separate attachments by type
       const imageAttachments = attachments.filter(a => a.contentType?.startsWith('image/'));
@@ -307,7 +309,7 @@ export async function POST(request: Request) {
       let totalTokens = countTokens(existingSystemMessages.map(msg => msg.content).join('\n'));
 
       for (const content of validContents) {
-        const message = createSystemMessage(content, id);
+        const message = createSystemMessage(content, requestBody.id);
         const messageTokens = countTokens(message.content);
         
         // Check if adding this document would exceed our token budget
@@ -323,7 +325,7 @@ export async function POST(request: Request) {
       // Save the user message with attachments
       const dbUserMessage: DBMessage = {
         id: userMessage.id,
-        chatId: id,
+        chatId: requestBody.id,
         role: userMessage.role,
         content: userMessage.content,
         createdAt: new Date().toISOString(),
@@ -340,7 +342,7 @@ export async function POST(request: Request) {
 
       // Only emit document context update if we have new system messages or images
       if (newSystemMessages.length > 0 || imageAttachments.length > 0) {
-        await emitDocumentContextUpdate(id, imageAttachments.length > 0);
+        await emitDocumentContextUpdate(requestBody.id, imageAttachments.length > 0);
       }
 
       // Combine existing system messages with new ones and prepare for OpenAI
@@ -355,7 +357,7 @@ export async function POST(request: Request) {
           role: msg.role as AIMessage['role'],
           content: msg.content
         })),
-        ...initialMessages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
+        ...requestBody.messages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
@@ -377,16 +379,16 @@ export async function POST(request: Request) {
           }))
       });
 
-      const chat = await getChatById({ id });
+      const chat = await getChatById({ id: requestBody.id });
 
       if (!chat) {
         const title = await generateTitleFromUserMessage({ message: userMessage });
         await saveChat({ 
-          id, 
+          id: requestBody.id, 
           userId: session.user.id, 
           title,
           visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private',
-          model: selectedChatModel
+          model: chatModelFromRequest
         });
       } else {
         // Check if user has permission to modify this chat
@@ -397,10 +399,10 @@ export async function POST(request: Request) {
 
       return createDataStreamResponse({
         execute: (dataStream) => {
-          console.log(`[MODEL DEBUG] Using model for chat ${id}: ${selectedChatModel} (from request body)`);
+          console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${chatModelFromRequest} (from request body)`);
           console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
           
-          const modelToUse = selectedChatModel;
+          const modelToUse = chatModelFromRequest;
           console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
           
           const result = streamText({
@@ -435,7 +437,7 @@ export async function POST(request: Request) {
                     messages: sanitizedResponseMessages.map((message) => {
                       return {
                         id: generateUUID(),
-                        chatId: id,
+                        chatId: requestBody.id,
                         role: message.role,
                         content: message.content,
                         createdAt: new Date().toISOString(),
@@ -456,7 +458,7 @@ export async function POST(request: Request) {
                     const assistantMessage = savedMessages.find(msg => msg.role === 'assistant');
                     if (assistantMessage) {
                       await trackMessageSent(
-                        id,
+                        requestBody.id,
                         'assistant',
                         assistantMessage.content.length,
                         userEmail || undefined
@@ -498,7 +500,7 @@ export async function POST(request: Request) {
           role: userMessage.role,
           content: userMessage.content,
           createdAt: new Date().toISOString(), 
-          chatId: id, 
+          chatId: requestBody.id, 
           type: 'message' 
         }],
       });
@@ -510,7 +512,7 @@ export async function POST(request: Request) {
           role: msg.role,
           content: msg.content
         })),
-        ...initialMessages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
+        ...requestBody.messages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
@@ -523,16 +525,16 @@ export async function POST(request: Request) {
       ];
     }
 
-    const chat = await getChatById({ id });
+    const chat = await getChatById({ id: requestBody.id });
 
     if (!chat) {
       const title = await generateTitleFromUserMessage({ message: userMessage });
       await saveChat({ 
-        id, 
+        id: requestBody.id, 
         userId: session.user.id, 
         title,
         visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private',
-        model: selectedChatModel
+        model: chatModelFromRequest
       });
     } else {
       // Check if user has permission to modify this chat
@@ -543,10 +545,10 @@ export async function POST(request: Request) {
 
     return createDataStreamResponse({
       execute: (dataStream) => {
-        console.log(`[MODEL DEBUG] Using model for chat ${id}: ${selectedChatModel} (from request body)`);
+        console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${chatModelFromRequest} (from request body)`);
         console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
         
-        const modelToUse = selectedChatModel;
+        const modelToUse = chatModelFromRequest;
         console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
       
         const result = streamText({
@@ -581,7 +583,7 @@ export async function POST(request: Request) {
                   messages: sanitizedResponseMessages.map((message) => {
                     return {
                       id: generateUUID(),
-                      chatId: id,
+                      chatId: requestBody.id,
                       role: message.role,
                       content: message.content,
                       createdAt: new Date().toISOString(),
@@ -602,7 +604,7 @@ export async function POST(request: Request) {
                   const assistantMessage = savedMessages.find(msg => msg.role === 'assistant');
                   if (assistantMessage) {
                     await trackMessageSent(
-                      id,
+                      requestBody.id,
                       'assistant',
                       assistantMessage.content.length,
                       userEmail || undefined
