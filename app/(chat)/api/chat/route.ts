@@ -156,7 +156,7 @@ export async function POST(request: Request) {
 
     // Get existing system messages from the conversation
     const existingSystemMessages = requestBody.messages.filter(
-      msg => msg.role === 'system' && 
+      (msg: { role: string; content: unknown }) => msg.role === 'system' && 
       typeof msg.content === 'string' && 
       msg.content.startsWith('Document Intelligence Analysis:')
     );
@@ -306,7 +306,7 @@ export async function POST(request: Request) {
 
       // Create system messages for each valid content
       const newSystemMessages: DBMessage[] = [];
-      let totalTokens = countTokens(existingSystemMessages.map(msg => msg.content).join('\n'));
+      let totalTokens = countTokens(existingSystemMessages.map((msg: { content: string }) => msg.content).join('\n'));
 
       for (const content of validContents) {
         const message = createSystemMessage(content, requestBody.id);
@@ -347,17 +347,17 @@ export async function POST(request: Request) {
 
       // Combine existing system messages with new ones and prepare for OpenAI
       processedMessages = [
-        ...existingSystemMessages.map(msg => ({
+        ...existingSystemMessages.map((msg: { id: string; role: string; content: string }) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
         })),
-        ...newSystemMessages.map(msg => ({
+        ...newSystemMessages.map((msg: DBMessage) => ({
           id: msg.id,
           role: msg.role as AIMessage['role'],
           content: msg.content
         })),
-        ...requestBody.messages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
+        ...requestBody.messages.filter((msg: { role: string; id: string }) => msg.role !== 'system' && msg.id !== userMessage.id).map((msg: { id: string; role: string; content: unknown }) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
@@ -368,10 +368,10 @@ export async function POST(request: Request) {
       // Debug logging for message processing
       console.log('[DEBUG] [chat] Processing messages:', {
         totalMessages: processedMessages.length,
-        systemMessages: processedMessages.filter(msg => msg.role === 'system').length,
+        systemMessages: processedMessages.filter((msg: { role: string }) => msg.role === 'system').length,
         systemMessageSummary: processedMessages
-          .filter(msg => msg.role === 'system')
-          .map(msg => ({
+          .filter((msg: { role: string }) => msg.role === 'system')
+          .map((msg: { id: string; content: unknown }) => ({
             id: msg.id,
             contentPreview: typeof msg.content === 'string' 
               ? `${msg.content.substring(0, 100)}...` 
@@ -507,12 +507,12 @@ export async function POST(request: Request) {
 
       // Keep existing system messages and strip attachments from all messages
       processedMessages = [
-        ...existingSystemMessages.map(msg => ({
+        ...existingSystemMessages.map((msg: { id: string; role: string; content: string }) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
         })),
-        ...requestBody.messages.filter(msg => msg.role !== 'system' && msg.id !== userMessage.id).map(msg => ({
+        ...requestBody.messages.filter((msg: { role: string; id: string }) => msg.role !== 'system' && msg.id !== userMessage.id).map((msg: { id: string; role: string; content: unknown }) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
