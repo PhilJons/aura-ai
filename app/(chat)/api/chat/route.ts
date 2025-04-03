@@ -116,9 +116,21 @@ export async function POST(request: Request) {
     
     // Check if web search should be enabled for this model
     const searchSupportedModels = new Set(['chat-model-large', 'chat-model-small']);
-    const isSearchEnabled = searchEnabledHeader && searchSupportedModels.has(chatModelFromRequest);
     
-    console.log(`[MODEL SELECTION] Using model: ${chatModelFromRequest} for chat: ${requestBody.id}, search enabled: ${isSearchEnabled}`);
+    // Check if the search toggle is enabled
+    const searchToggleEnabled = searchEnabledHeader === true;
+    
+    // Special handling for o3-mini with search
+    let modelToUseForRequest = chatModelFromRequest;
+    if (searchToggleEnabled && chatModelFromRequest === 'chat-model-o3-mini') {
+      // Fall back to the large model when o3-mini is selected with search enabled
+      modelToUseForRequest = 'chat-model-large';
+      console.log(`[MODEL FALLBACK] Search enabled with o3-mini, using large model instead`);
+    }
+    
+    const isSearchEnabled = searchToggleEnabled && searchSupportedModels.has(modelToUseForRequest);
+    
+    console.log(`[MODEL SELECTION] Using model: ${modelToUseForRequest} for chat: ${requestBody.id}, search enabled: ${isSearchEnabled}`);
     
     // Early check if we need to handle attachments
     const attachments = requestBody.messages.filter(msg => msg.attachments && msg.attachments.length > 0);
@@ -155,12 +167,12 @@ export async function POST(request: Request) {
         Chat Model (if exists): ${chat?.model || "Not found (new chat)"}`);
       
       // Track which model is being used for this message with user email
-      await trackModelUsed(requestBody.id, chatModelFromRequest, userEmail || undefined);
+      await trackModelUsed(requestBody.id, modelToUseForRequest, userEmail || undefined);
 
       // Debug logging
       console.log(`[MODEL COMPARISON] 
-        Cookie Model: ${chatModelFromRequest}
-        Selected Model (from request): ${chatModelFromRequest}
+        Cookie Model: ${modelToUseForRequest}
+        Selected Model (from request): ${modelToUseForRequest}
         Chat Model (if exists): ${chat?.model || 'Not found (new chat)'}
       `);
 
@@ -324,14 +336,14 @@ export async function POST(request: Request) {
       if (!chat) {
         const title = await generateTitleFromUserMessage({ message: requestBody.messages[0] });
         
-        console.log(`[CHAT CREATION] Creating new chat with model: ${chatModelFromRequest}`);
+        console.log(`[CHAT CREATION] Creating new chat with model: ${modelToUseForRequest}`);
         
         await saveChat({ 
           id: requestBody.id, 
           userId: session.user.id, 
           title,
           visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private',
-          model: chatModelFromRequest
+          model: modelToUseForRequest
         });
       } else {
         // Check if user has permission to modify this chat
@@ -342,12 +354,12 @@ export async function POST(request: Request) {
 
       return createDataStreamResponse({
         execute: (dataStream) => {
-          console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${chatModelFromRequest} (from request body)`);
+          console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${modelToUseForRequest} (from request body)`);
           console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
           
           // Always use the model from the request, which comes from the cookie
           // This ensures consistency between what the user sees and what's used
-          const modelToUse = chatModelFromRequest;
+          const modelToUse = modelToUseForRequest;
           console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
           
           const result = streamText({
@@ -470,14 +482,14 @@ export async function POST(request: Request) {
     if (!chat) {
       const title = await generateTitleFromUserMessage({ message: requestBody.messages[0] });
       
-      console.log(`[CHAT CREATION] Creating new chat with model: ${chatModelFromRequest}`);
+      console.log(`[CHAT CREATION] Creating new chat with model: ${modelToUseForRequest}`);
       
       await saveChat({ 
         id: requestBody.id, 
         userId: session.user.id, 
         title,
         visibility: request.headers.get('x-visibility-type') as 'private' | 'public' || 'private',
-        model: chatModelFromRequest
+        model: modelToUseForRequest
       });
     } else {
       // Check if user has permission to modify this chat
@@ -488,12 +500,12 @@ export async function POST(request: Request) {
 
     return createDataStreamResponse({
       execute: (dataStream) => {
-        console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${chatModelFromRequest} (from request body)`);
+        console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${modelToUseForRequest} (from request body)`);
         console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
         
         // Always use the model from the request, which comes from the cookie
         // This ensures consistency between what the user sees and what's used
-        const modelToUse = chatModelFromRequest;
+        const modelToUse = modelToUseForRequest;
         console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
       
         const result = streamText({
