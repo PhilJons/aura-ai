@@ -27,6 +27,7 @@ import { getEncoding } from 'js-tiktoken';
 import { processDocument, } from '@/lib/azure/document';
 import { trackChatCreated, trackMessageSent, trackModelUsed } from '@/lib/analytics';
 import { searchTool } from '@/lib/ai/tools/search';
+import { cookies } from 'next/headers';
 
 // Maximum tokens we want to allow for the context (8k for GPT-4)
 const MAX_CONTEXT_TOKENS = 8000;
@@ -95,11 +96,9 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const session = await auth();
 
-  if (!session?.user?.id) {
+  if (!session || !session.user || !session.user.id) {
     return new Response('Unauthorized', { status: 401 });
   }
-  
-  const userEmail = session.user.email;
 
   try {
     const requestBody = await request.json();
@@ -107,124 +106,78 @@ export async function POST(request: Request) {
     // Get the search-enabled state from the cookie
     const searchEnabledHeader = request.headers.get('x-search-enabled') === 'true';
     
-    // Get the selected chat model from the request body or use the default
-    const chatModelFromRequest = requestBody.model || DEFAULT_CHAT_MODEL;
+    // Get the model from cookie
+    const cookieStore = await cookies();
+    const userEmail = session.user.email;
+    const chatModelFromCookie = cookieStore.get('chat-model')?.value || DEFAULT_CHAT_MODEL;
+    
+    // Use model from request if provided, otherwise use cookie model
+    const chatModelFromRequest = requestBody.model || chatModelFromCookie;
     
     // Check if web search should be enabled for this model
-    // Add o3-mini to the list of models that support web browsing
-    const modelsWithSearchEnabled = ['chat-model-large', 'chat-model-small', 'chat-model-o3-mini'];
-    const isSearchEnabled = searchEnabledHeader && modelsWithSearchEnabled.includes(chatModelFromRequest);
+    const searchSupportedModels = new Set(['chat-model-large', 'chat-model-small']);
+    const isSearchEnabled = searchEnabledHeader && searchSupportedModels.has(chatModelFromRequest);
     
-    console.log(`[Search Debug] Model: ${chatModelFromRequest}, Search enabled: ${isSearchEnabled}`);
-
-    // Check if this is a new chat
-    const existingChat = await getChatById({ id: requestBody.id });
-    const isNewChat = !existingChat;
+    console.log(`[MODEL SELECTION] Using model: ${chatModelFromRequest} for chat: ${requestBody.id}, search enabled: ${isSearchEnabled}`);
     
-    if (isNewChat) {
-      // Track new chat creation with user email
-      await trackChatCreated(requestBody.id, userEmail || undefined);
-    }
+    // Early check if we need to handle attachments
+    const attachments = requestBody.messages.filter(msg => msg.attachments && msg.attachments.length > 0);
     
-    // Track which model is being used for this message with user email
-    await trackModelUsed(requestBody.id, chatModelFromRequest, userEmail || undefined);
-    
-    // Debug logging
-    console.log(`[MODEL COMPARISON] 
-      Cookie Model: ${chatModelFromRequest}
-      Selected Model (from request): ${chatModelFromRequest}
-      Chat Model (if exists): ${existingChat?.model || 'Not found (new chat)'}
-    `);
+    // Normalize the message structure for processing
+    let processedMessages = [...requestBody.messages] as any[];
 
-    const userMessage = getMostRecentUserMessage(requestBody.messages);
-    if (!userMessage) {
-      return new Response('No user message found', { status: 400 });
-    }
-
-    // Track the user message being sent with user email
-    await trackMessageSent(
-      requestBody.id, 
-      'user', 
-      typeof userMessage.content === 'string' 
-        ? userMessage.content.length 
-        : JSON.stringify(userMessage.content).length,
-      userEmail || undefined
-    );
-
-    const attachments = userMessage.experimental_attachments;
-    let processedMessages = [...requestBody.messages];
-
-    // Get existing system messages from the conversation
-    const existingSystemMessages = requestBody.messages.filter(
-      (msg: { role: string; content: unknown }) => msg.role === 'system' && 
-      typeof msg.content === 'string' && 
-      msg.content.startsWith('Document Intelligence Analysis:')
-    );
-
-    if (attachments?.length) {
-      // Mark file upload started
-      await emitDocumentContextUpdate(requestBody.id);
-
-      // Separate attachments by type
-      const imageAttachments = attachments.filter(a => a.contentType?.startsWith('image/'));
-      
-      // Define text-based file types
-      const TEXT_BASED_TYPES = [
-        'text/plain',
-        'text/markdown',
-        'text/x-markdown',
-        'text/javascript',
-        'application/javascript',
-        'text/typescript',
-        'application/typescript',
-        'text/x-typescript',
-        'text/jsx',
-        'text/tsx',
-        'text/css',
-        'text/html',
-        'text/x-python',
-        'application/x-python',
-        'text/x-java',
-        'text/x-c',
-        'text/x-c++',
-        'text/x-go',
-        'text/x-rust',
-        'text/x-ruby',
-        'text/x-php',
-        'text/x-swift',
-        'text/x-kotlin',
-        'text/x-scala',
-        'text/csv',
-        'text/yaml',
-        'text/x-yaml',
-        'application/json',
-        'text/xml'
-      ];
-
-      const documentAttachments = attachments.filter((a) => {
-        const customAttachment = a as CustomAttachment;
-        return !!(customAttachment.contentType && (
-          // Handle extracted JSON from PDFs
-          (customAttachment.contentType === 'application/json' && customAttachment.isAzureExtractedJson) || 
-          // Handle PDFs
-          customAttachment.contentType === 'application/pdf' || 
-          // Handle all text-based files
-          TEXT_BASED_TYPES.includes(customAttachment.contentType)
-        ));
+    // Check if we need to handle attachments or documents in this request
+    if (attachments.length > 0) {
+      // First, save the user message
+      await saveMessages({
+        messages: [{ 
+          id: requestBody.messages[0].id,
+          role: requestBody.messages[0].role,
+          content: requestBody.messages[0].content,
+          createdAt: new Date().toISOString(), 
+          chatId: requestBody.id, 
+          type: 'message' 
+        }],
       });
+      
+      // Get any existing system messages
+      const existingSystemMessages = requestBody.messages.filter(msg => msg.role === 'system');
+      
+      console.log(`Found ${existingSystemMessages.length} existing system messages`);
+      
+      // Look up the chat
+      const chat = await getChatById({ id: requestBody.id });
+      
+      // Log the model comparison after chat lookup
+      console.log(`[MODEL COMPARISON] 
+        Cookie Model: ${chatModelFromCookie}
+        Selected Model (from request): ${requestBody.model || "Not specified in request"}
+        Chat Model (if exists): ${chat?.model || "Not found (new chat)"}`);
+      
+      // Track which model is being used for this message with user email
+      await trackModelUsed(requestBody.id, chatModelFromRequest, userEmail || undefined);
 
-      // Create a copy of the user message that preserves image attachments
-      const userMessageWithImages = {
-        id: userMessage.id,
-        role: userMessage.role,
-        content: userMessage.content,
-        experimental_attachments: imageAttachments
-      };
+      // Debug logging
+      console.log(`[MODEL COMPARISON] 
+        Cookie Model: ${chatModelFromRequest}
+        Selected Model (from request): ${chatModelFromRequest}
+        Chat Model (if exists): ${chat?.model || 'Not found (new chat)'}
+      `);
+
+      // Track the user message being sent with user email
+      await trackMessageSent(
+        requestBody.id, 
+        'user', 
+        typeof requestBody.messages[0].content === 'string' 
+          ? requestBody.messages[0].content.length 
+          : JSON.stringify(requestBody.messages[0].content).length,
+        userEmail || undefined
+      );
 
       // Process each document attachment
       const validContents: Array<{ text: string; metadata?: any; name: string; originalName?: string; pdfUrl?: string }> = [];
 
-      for (const attachment of documentAttachments as CustomAttachment[]) {
+      for (const attachment of attachments as CustomAttachment[]) {
         try {
           const { contentType, name, url } = attachment;
           if (!contentType || !name || !url) {
@@ -284,7 +237,7 @@ export async function POST(request: Request) {
           }
 
           // Handle other text-based files
-          if (TEXT_BASED_TYPES.includes(contentType)) {
+          if (searchSupportedModels.has(contentType)) {
             const response = await fetch(url);
             const text = await response.text();
             validContents.push({
@@ -322,27 +275,16 @@ export async function POST(request: Request) {
         totalTokens += messageTokens;
       }
 
-      // Save the user message with attachments
-      const dbUserMessage: DBMessage = {
-        id: userMessage.id,
-        chatId: requestBody.id,
-        role: userMessage.role,
-        content: userMessage.content,
-        createdAt: new Date().toISOString(),
-        type: 'message',
-        attachments: JSON.stringify(userMessageWithImages.experimental_attachments || [])
-      };
-
       // Save messages to the database
       await saveMessages({
         messages: [{
-          ...dbUserMessage
+          ...requestBody.messages[0]
         }, ...newSystemMessages],
       });
 
       // Only emit document context update if we have new system messages or images
-      if (newSystemMessages.length > 0 || imageAttachments.length > 0) {
-        await emitDocumentContextUpdate(requestBody.id, imageAttachments.length > 0);
+      if (newSystemMessages.length > 0 || attachments.length > 0) {
+        await emitDocumentContextUpdate(requestBody.id, attachments.length > 0);
       }
 
       // Combine existing system messages with new ones and prepare for OpenAI
@@ -357,12 +299,12 @@ export async function POST(request: Request) {
           role: msg.role as AIMessage['role'],
           content: msg.content
         })),
-        ...requestBody.messages.filter((msg: { role: string; id: string }) => msg.role !== 'system' && msg.id !== userMessage.id).map((msg: { id: string; role: string; content: unknown }) => ({
+        ...requestBody.messages.filter((msg: { role: string; id: string }) => msg.role !== 'system' && msg.id !== requestBody.messages[0].id).map((msg: { id: string; role: string; content: unknown }) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
         })),
-        userMessageWithImages // Use the version with image attachments
+        requestBody.messages[0]
       ];
 
       // Debug logging for message processing
@@ -379,10 +321,11 @@ export async function POST(request: Request) {
           }))
       });
 
-      const chat = await getChatById({ id: requestBody.id });
-
       if (!chat) {
-        const title = await generateTitleFromUserMessage({ message: userMessage });
+        const title = await generateTitleFromUserMessage({ message: requestBody.messages[0] });
+        
+        console.log(`[CHAT CREATION] Creating new chat with model: ${chatModelFromRequest}`);
+        
         await saveChat({ 
           id: requestBody.id, 
           userId: session.user.id, 
@@ -402,6 +345,8 @@ export async function POST(request: Request) {
           console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${chatModelFromRequest} (from request body)`);
           console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
           
+          // Always use the model from the request, which comes from the cookie
+          // This ensures consistency between what the user sees and what's used
           const modelToUse = chatModelFromRequest;
           console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
           
@@ -496,9 +441,9 @@ export async function POST(request: Request) {
       // If no attachments, just save the user message and keep existing system messages
       await saveMessages({
         messages: [{ 
-          id: userMessage.id,
-          role: userMessage.role,
-          content: userMessage.content,
+          id: requestBody.messages[0].id,
+          role: requestBody.messages[0].role,
+          content: requestBody.messages[0].content,
           createdAt: new Date().toISOString(), 
           chatId: requestBody.id, 
           type: 'message' 
@@ -507,20 +452,15 @@ export async function POST(request: Request) {
 
       // Keep existing system messages and strip attachments from all messages
       processedMessages = [
-        ...existingSystemMessages.map((msg: { id: string; role: string; content: string }) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content
-        })),
-        ...requestBody.messages.filter((msg: { role: string; id: string }) => msg.role !== 'system' && msg.id !== userMessage.id).map((msg: { id: string; role: string; content: unknown }) => ({
+        ...requestBody.messages.filter((msg: { role: string; id: string }) => msg.role !== 'system' && msg.id !== requestBody.messages[0].id).map((msg: { id: string; role: string; content: unknown }) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content
         })),
         {
-          id: userMessage.id,
-          role: userMessage.role,
-          content: userMessage.content
+          id: requestBody.messages[0].id,
+          role: requestBody.messages[0].role,
+          content: requestBody.messages[0].content
         }
       ];
     }
@@ -528,7 +468,10 @@ export async function POST(request: Request) {
     const chat = await getChatById({ id: requestBody.id });
 
     if (!chat) {
-      const title = await generateTitleFromUserMessage({ message: userMessage });
+      const title = await generateTitleFromUserMessage({ message: requestBody.messages[0] });
+      
+      console.log(`[CHAT CREATION] Creating new chat with model: ${chatModelFromRequest}`);
+      
       await saveChat({ 
         id: requestBody.id, 
         userId: session.user.id, 
@@ -548,6 +491,8 @@ export async function POST(request: Request) {
         console.log(`[MODEL DEBUG] Using model for chat ${requestBody.id}: ${chatModelFromRequest} (from request body)`);
         console.log(`[MODEL DEBUG] Chat model from database: ${chat?.model || 'Not found in DB'}`);
         
+        // Always use the model from the request, which comes from the cookie
+        // This ensures consistency between what the user sees and what's used
         const modelToUse = chatModelFromRequest;
         console.log(`[MODEL DEBUG] Final model selected: ${modelToUse}`);
       

@@ -15,7 +15,7 @@ if (!process.env.NEXT_PUBLIC_OPENAI_API_KEY) {
   throw new Error('NEXT_PUBLIC_OPENAI_API_KEY is not set (needed for image generation)');
 }
 
-export const DEFAULT_CHAT_MODEL: string = 'chat-model-o3-mini';
+export const DEFAULT_CHAT_MODEL: string = 'chat-model-large';
 
 // Debug logging function with timestamp
 const debugLog = (message: string, data?: any) => {

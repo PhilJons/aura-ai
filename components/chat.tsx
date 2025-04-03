@@ -70,7 +70,20 @@ export function Chat({
   // Update currentModel when chat data changes
   useEffect(() => {
     if (chat?.model) {
-      setCurrentModel(chat.model);
+      // Get cookie value to compare
+      const cookieModel = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('chat-model='))
+        ?.split('=')[1];
+      
+      if (cookieModel) {
+        console.log(`[Model Selection] Cookie model: ${cookieModel}, DB model: ${chat.model}`);
+        // Prioritize cookie model over database model
+        setCurrentModel(cookieModel);
+      } else {
+        // Fall back to database model if no cookie exists
+        setCurrentModel(chat.model);
+      }
     } else {
       setCurrentModel(selectedChatModel);
     }

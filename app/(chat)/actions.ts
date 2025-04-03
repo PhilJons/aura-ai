@@ -32,29 +32,90 @@ export async function saveChatModelAsCookie(model: string, chatId?: string) {
     await trackModelChanged(chatId || 'global', previousModel, modelToSave, userEmail || undefined);
   }
   
+  // Set the cookie first
   cookieStore.set('chat-model', modelToSave);
   
   // If a chatId is provided, also update the chat in the database
   if (chatId) {
+    console.log(`[DB Update] Attempting to update chat model in database for chatId: ${chatId} to model: ${modelToSave}`);
+    
     try {
-      // Find the chat
-      const { resources: [chat] } = await containers.chats.items
-        .query({
-          query: "SELECT * FROM c WHERE c.id = @id",
-          parameters: [{ name: "@id", value: chatId }]
-        })
-        .fetchAll();
+      // First try to get the chat directly by ID (faster and more reliable)
+      let chat;
+      try {
+        const { resource } = await containers.chats.item(chatId, chatId).read();
+        chat = resource;
+        console.log(`[DB Update] Found chat directly by ID: ${chatId}`);
+      } catch (directReadError: any) {
+        console.log(`[DB Update] Direct read failed, trying query: ${directReadError?.message || 'Unknown error'}`);
+        // Fall back to query if direct read fails
+        const { resources } = await containers.chats.items
+          .query({
+            query: "SELECT * FROM c WHERE c.id = @id",
+            parameters: [{ name: "@id", value: chatId }]
+          })
+          .fetchAll();
+        
+        chat = resources[0];
+        console.log(`[DB Update] Query returned ${resources.length} results`);
+      }
       
       if (chat) {
-        // Update the chat's model
-        chat.model = modelToSave;
-        await containers.chats.items.upsert(chat);
+        console.log(`[DB Update] Current chat model: ${chat.model}, updating to: ${modelToSave}`);
+        
+        // Ensure chat has all required properties
+        const updatedChat = {
+          ...chat,
+          model: modelToSave,
+        };
+        
+        // Perform the upsert
+        try {
+          const { resource } = await containers.chats.items.upsert(updatedChat);
+          console.log(`[DB Update] Update successful: ${resource?.id}`);
+          
+          // Double-check the update was successful
+          const { resource: verifyResource } = await containers.chats.item(chatId, chatId).read();
+          if (verifyResource?.model !== modelToSave) {
+            console.error(`[DB Update] Verification failed! Expected ${modelToSave}, got ${verifyResource?.model}`);
+          } else {
+            console.log(`[DB Update] Verification successful, model is now: ${verifyResource.model}`);
+          }
+        } catch (upsertError: any) {
+          // Try to handle specific upsert errors
+          console.error(`[DB Update] Upsert failed: ${upsertError?.message || 'Unknown error'}`);
+          
+          // Try a direct replace as a fallback
+          try {
+            console.log(`[DB Update] Attempting direct replace as fallback`);
+            const { resource } = await containers.chats.item(chatId, chatId).replace(updatedChat);
+            console.log(`[DB Update] Replace successful: ${resource?.id}`);
+          } catch (replaceError: any) {
+            console.error(`[DB Update] Replace failed: ${replaceError?.message || 'Unknown error'}`);
+            throw replaceError; // Propagate the error for further handling
+          }
+        }
+      } else {
+        console.error(`[DB Update] Chat not found with ID: ${chatId}`);
       }
-    } catch (error) {
-      console.error('Error updating chat model in database:', error);
-      // Don't throw - we still want to set the cookie even if DB update fails
+    } catch (error: any) {
+      console.error(`[DB Update] Error updating chat model: ${error?.message || 'Unknown error'}`, error?.stack);
+      
+      // Log detailed error information for debugging
+      if (error?.code) {
+        console.error(`[DB Update] Error code: ${error.code}`);
+      }
+      if (error?.body) {
+        console.error(`[DB Update] Error body: ${JSON.stringify(error.body)}`);
+      }
+      
+      // We don't throw here because we want the function to continue
+      // Instead, we'll log a clear message that will help with debugging
+      console.error(`[DB Update] FAILED TO UPDATE MODEL IN DATABASE. Cookie model is ${modelToSave} but database model may differ.`);
     }
   }
+  
+  return modelToSave;
 }
 
 export async function generateTitleFromUserMessage({
