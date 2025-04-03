@@ -1,4 +1,4 @@
-import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol, StorageSharedKeyCredential } from '@azure/storage-blob';
+import { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions, SASProtocol, type StorageSharedKeyCredential } from '@azure/storage-blob';
 import { logger } from '@/lib/utils/logger';
 
 if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {

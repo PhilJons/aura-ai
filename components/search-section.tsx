@@ -126,11 +126,11 @@ export function SearchSection({
   return (
     <div className="max-w-2xl mx-auto w-full">
       <CollapsibleMessage
-        role="assistant"
         isCollapsible={true}
         header={header}
         isOpen={isOpen}
         onOpenChange={onOpenChange}
+        role="assistant"
       >
         {/* TODO: Review or remove image search results section - searchResults type doesn't have 'images' */}
         {/* {searchResults &&
@@ -293,11 +293,11 @@ export function GroupedSearchSection({ invocations, chatId }: GroupedSearchSecti
     return (
       <div className="max-w-2xl mx-auto w-full">
         <CollapsibleMessage
-          role="assistant"
           isCollapsible={true}
           header={headerContent}
           isOpen={isOpen}
           onOpenChange={setIsOpen}
+          role="assistant"
         >
           <div className="p-4">
             <Section title="Sources">

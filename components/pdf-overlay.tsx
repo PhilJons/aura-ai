@@ -175,7 +175,7 @@ export function PdfOverlay({
               onLoad={handleLoad}
               onError={handleError}
             >
-              <div className="flex flex-col items-center justify-center p-4 w-full h-full">
+              <div className="flex flex-col items-center justify-center p-4 size-full">
                 <p className="mb-4 text-foreground dark:text-zinc-300">
                   PDF preview is not available in this browser.
                 </p>

@@ -17,15 +17,14 @@ import {
 import type { Message as DBMessage } from '@/lib/db/schema';
 import {
   generateUUID,
-  getMostRecentUserMessage,
   sanitizeResponseMessages,
 } from '@/lib/utils';
 import { emitDocumentContextUpdate } from '@/lib/utils/stream';
-import { generateTitleFromUserMessage, getChatModelFromCookies } from '@/app/(chat)/actions';
+import { generateTitleFromUserMessage, } from '@/app/(chat)/actions';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getEncoding } from 'js-tiktoken';
 import { processDocument, } from '@/lib/azure/document';
-import { trackChatCreated, trackMessageSent, trackModelUsed } from '@/lib/analytics';
+import { trackMessageSent, trackModelUsed } from '@/lib/analytics';
 import { searchTool } from '@/lib/ai/tools/search';
 import { cookies } from 'next/headers';
 

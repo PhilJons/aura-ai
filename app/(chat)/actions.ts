@@ -41,7 +41,7 @@ export async function saveChatModelAsCookie(model: string, chatId?: string) {
     
     try {
       // First try to get the chat directly by ID (faster and more reliable)
-      let chat;
+      let chat: { id: string; model?: string; [key: string]: any } | undefined;
       try {
         const { resource } = await containers.chats.item(chatId, chatId).read();
         chat = resource;
