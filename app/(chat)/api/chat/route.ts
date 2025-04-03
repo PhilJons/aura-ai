@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     console.log(`[MODEL SELECTION] Using model: ${modelToUseForRequest} for chat: ${requestBody.id}, search enabled: ${isSearchEnabled}`);
     
     // Early check if we need to handle attachments
-    const attachments = requestBody.messages.filter(msg => msg.attachments && msg.attachments.length > 0);
+    const attachments = requestBody.messages.filter((msg: { attachments?: any[] }) => msg.attachments && msg.attachments.length > 0);
     
     // Normalize the message structure for processing
     let processedMessages = [...requestBody.messages] as any[];
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
       });
       
       // Get any existing system messages
-      const existingSystemMessages = requestBody.messages.filter(msg => msg.role === 'system');
+      const existingSystemMessages = requestBody.messages.filter((msg: { role: string }) => msg.role === 'system');
       
       console.log(`Found ${existingSystemMessages.length} existing system messages`);
       
