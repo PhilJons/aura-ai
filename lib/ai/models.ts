@@ -15,6 +15,11 @@ if (!process.env.NEXT_PUBLIC_OPENAI_API_KEY) {
   throw new Error('NEXT_PUBLIC_OPENAI_API_KEY is not set (needed for image generation)');
 }
 
+// Add check for the new GPT-4.1 key
+if (!process.env.NEXT_PUBLIC_AZURE_GPT41_API_KEY) {
+  throw new Error('NEXT_PUBLIC_AZURE_GPT41_API_KEY is not set');
+}
+
 export const DEFAULT_CHAT_MODEL: string = 'chat-model-large';
 
 // Debug logging function with timestamp
@@ -57,7 +62,7 @@ const createModel = (modelName: string) => {
       console.log(`[Azure OpenAI] Full endpoint: https://auraaiazfoundr8926783027.cognitiveservices.azure.com/openai/deployments/${deploymentName}/chat/completions?api-version=${apiVersion}`);
       
       const provider = createAzure({
-        ...baseConfig,
+        apiKey: baseConfig.apiKey,
         resourceName: 'auraaiazfoundr8926783027',
         apiVersion: apiVersion,
       });
@@ -67,11 +72,32 @@ const createModel = (modelName: string) => {
       console.log(`[Azure OpenAI] Full endpoint: https://${process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME}.openai.azure.com/openai/deployments/${deploymentName}/chat/completions?api-version=${baseConfig.apiVersion}`);
       
       const provider = createAzure({
-        ...baseConfig,
+        apiKey: baseConfig.apiKey,
         resourceName: process.env.NEXT_PUBLIC_AZURE_OPENAI_RESOURCE_NAME,
+        apiVersion: baseConfig.apiVersion,
       });
       return provider.chat(deploymentName);
     }
+  } else if (modelName === 'gpt-4.1') {
+    // Specific configuration for gpt-4.1
+    const gpt41ApiKey = process.env.NEXT_PUBLIC_AZURE_GPT41_API_KEY;
+    if (!gpt41ApiKey) {
+      throw new Error('Azure GPT-4.1 API key (NEXT_PUBLIC_AZURE_GPT41_API_KEY) is not configured');
+    }
+    const deploymentName = 'gpt-4.1';
+    const apiVersion = '2025-01-01-preview';
+    const baseDomain = 'https://swedencentral.api.cognitive.microsoft.com/';
+    // Combine the path segments usually handled by the SDK into the deployment name
+    const deploymentNameWithPath = `openai/deployments/${deploymentName}`;
+    
+    console.log(`[Azure OpenAI] Using createAzure for model: ${modelName} with base domain: ${baseDomain}, deploymentNameWithPath: ${deploymentNameWithPath}, apiVersion: ${apiVersion}`);
+
+    const provider = createAzure({
+      apiKey: gpt41ApiKey,
+      baseURL: baseDomain, // Only provide the base domain
+      apiVersion: apiVersion, // Still provide apiVersion
+    });
+    return provider.chat(deploymentNameWithPath);
   } else {
     // For DeepSeek and Llama, use Azure AI endpoint
     const deploymentMap: { [key: string]: string } = {
@@ -116,6 +142,7 @@ const gpt4omini = createModelWithLogging('GPT-4o mini', 'gpt-4o-mini');
 const o3mini = createModelWithLogging('GPT o3-mini', 'o3-mini');
 const deepseek = createModelWithLogging('DeepSeek', 'deepseek');
 const llama = createModelWithLogging('Llama', 'llama');
+const gpt41 = createModelWithLogging('GPT-4.1', 'gpt-4.1');
 
 // Add global error handler for debugging
 if (typeof window !== 'undefined') {
@@ -146,6 +173,7 @@ export const myProvider = customProvider({
     'chat-model-o3-mini': o3mini,
     'chat-model-reasoning': deepseek,
     'chat-model-advanced': llama,
+    'chat-model-gpt41': gpt41,
     'title-model': gpt4o,
     'block-model': gpt4o,
   },
@@ -194,5 +222,11 @@ export const chatModels: Array<ChatModel> = [
     name: 'Llama 70B',
     description: 'Advanced tasks with Llama 70B model',
     enabled: false,  // Temporarily disabled
+  },
+  {
+    id: 'chat-model-gpt41',
+    name: 'GPT-4.1',
+    description: 'Specific deployment of GPT-4.1 model',
+    enabled: true,
   },
 ];
